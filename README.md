@@ -81,9 +81,14 @@ path is Pages project → **Custom domains** → **Set up a custom domain**.
 
 ```bash
 npm install
-npm run db:local     # create the local tables
-npm run dev          # http://localhost:8788
+npm run dev          # http://localhost:8788 — start this FIRST
+npm run db:local     # then create the local tables
 ```
+
+⚠️ **Order matters, and it is not the obvious one.** `wrangler pages dev` creates the
+local D1 file on first start; seeding before it exists puts the tables somewhere the
+dev server never reads, and every endpoint answers `no such table: sets`. Start the
+server, then seed, then reload.
 
 The local database is a separate sqlite file under `.wrangler/` — nothing you do
 locally touches production.

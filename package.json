@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Karl's training log — Cloudflare Pages + Functions + D1",
   "scripts": {
-    "dev": "wrangler pages dev public --d1 DB=ironlog",
+    "dev": "wrangler pages dev",
     "db:local": "wrangler d1 execute ironlog --local --file=./schema.sql",
     "db:remote": "wrangler d1 execute ironlog --remote --file=./schema.sql",
     "access": "node access.mjs"
