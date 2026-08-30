@@ -81,4 +81,62 @@ if (!verify.ok || !after.includes(HOST)) {
 }
 
 const rec = (verify.body.result || []).find(d => (d.name || d.domain) === HOST) || {};
-console.log(`  ok verified: ${HOST} is attached${rec.status ? ` (status: ${rec.status})` : ""}`);
+console.log(`  ok attached to the project${rec.status ? ` (status: ${rec.status})` : ""}`);
+
+// ---------------------------------------------------------------- 3. the DNS
+// Registering the domain on the project is NOT enough. The dashboard flow also
+// writes a proxied CNAME; the API does not, so the hostname stays pending and
+// simply does not resolve. Without this the deploy prints a custom-domain URL
+// that no browser can reach — the script looking successful is the whole
+// failure mode this file exists to prevent.
+const zones = await cf("GET", "/zones?per_page=50");
+if (!zones.ok) {
+  console.error(`  x could not list zones — ${firstError(zones)}`);
+  permHint(zones);
+  process.exit(1);
+}
+// Longest matching suffix, so a.b.example.com picks example.com over com.
+const zone = (zones.body?.result || [])
+  .filter(z => HOST === z.name || HOST.endsWith("." + z.name))
+  .sort((a, b) => b.name.length - a.name.length)[0];
+
+if (!zone) {
+  console.error(`  x no Cloudflare zone on this account covers ${HOST}`);
+  process.exit(1);
+}
+
+const recs = await cf("GET", `/zones/${zone.id}/dns_records?name=${encodeURIComponent(HOST)}`);
+if (!recs.ok) {
+  console.error(`  x could not read DNS records in ${zone.name} — ${firstError(recs)}`);
+  if (recs.status === 403 || recs.status === 401) {
+    console.error("    The API token is missing DNS permission. Edit your token and add:");
+    console.error(`      Zone | DNS | Edit    (Zone Resources: Include | ${zone.name})`);
+    console.error("    Then re-run: bash deploy.sh");
+  }
+  process.exit(1);
+}
+
+const TARGET = `${PROJECT}.pages.dev`;
+const existing = (recs.body?.result || [])[0];
+
+if (existing && existing.type === "CNAME" && existing.content === TARGET) {
+  console.log(`  ok DNS already points ${HOST} -> ${TARGET}`);
+} else if (existing) {
+  // Something else lives here. Refuse rather than silently repoint his DNS.
+  console.error(`  x ${HOST} already has a ${existing.type} record -> ${existing.content}`);
+  console.error("    Refusing to overwrite it. Remove or repoint it by hand, then re-run.");
+  process.exit(1);
+} else {
+  const made = await cf("POST", `/zones/${zone.id}/dns_records`, {
+    type: "CNAME", name: HOST, content: TARGET, proxied: true,
+    comment: "Cloudflare Pages custom domain — created by domain.mjs",
+  });
+  if (!made.ok) {
+    console.error(`  x could not create the CNAME — ${firstError(made)}`);
+    process.exit(1);
+  }
+  console.log(`  ok DNS created: ${HOST} -> ${TARGET} (proxied)`);
+}
+
+console.log(`  ok verified: ${HOST} is attached and resolving via ${zone.name}`);
+console.log("     the certificate takes a few minutes to issue after this");

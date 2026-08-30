@@ -152,7 +152,9 @@ if [ -z "${CF_API_TOKEN:-}" ]; then
     -> Create Custom Token
        Permissions:        Account | Access: Apps and Policies | Edit
                            Account | Cloudflare Pages             | Edit
+                           Zone    | DNS                          | Edit
        Account Resources:  Include | the account above
+       Zone Resources:     Include | the zone holding $APP_HOST
 
 TOK
   read -r -s -p "  CF_API_TOKEN: " CF_API_TOKEN; echo
