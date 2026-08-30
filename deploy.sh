@@ -33,10 +33,34 @@ fi
 WR="npx --no-install wrangler"
 ok "wrangler $($WR --version 2>/dev/null | tail -1)"
 
+# Anything remembered from a previous run (account id, token, allowed emails).
+# Sourced before login so a stored token can stand in for the browser flow.
+ENVFILE=.cf-access.env
+# shellcheck source=/dev/null
+[ -f "$ENVFILE" ] && . "$ENVFILE"
+
 # ---------------------------------------------------------------- 1. login
+# Two ways in, and the token path is what makes this runnable off Skunkworks.
+#
+#   CLOUDFLARE_API_TOKEN  — wrangler reads this natively, no browser, no OAuth.
+#                           Set it and the whole script runs unattended on any
+#                           machine. This is the portable path.
+#   wrangler login        — interactive OAuth, stored on this machine only.
+#
+# The same token also drives access.mjs and domain.mjs, so one credential does
+# the whole deploy. See "Deploying from another machine" in the README.
 say "Cloudflare login"
-if $WR whoami 2>&1 | grep -qi "not authenticated\|you are not logged in"; then
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  $WR whoami >/dev/null 2>&1 \
+    && ok "using CLOUDFLARE_API_TOKEN — no browser login needed" \
+    || die "CLOUDFLARE_API_TOKEN is set but wrangler rejected it. Check it has not expired and is scoped to the right account."
+  # One credential for the whole run: let the Access and DNS steps reuse it
+  # unless a separate CF_API_TOKEN has deliberately been provided.
+  : "${CF_API_TOKEN:=$CLOUDFLARE_API_TOKEN}"
+  : "${CF_ACCOUNT_ID:=${CLOUDFLARE_ACCOUNT_ID:-}}"
+elif $WR whoami 2>&1 | grep -qi "not authenticated\|you are not logged in"; then
   warn "Not logged in — a browser window will open. Approve it, then come back here."
+  warn "To run this without a browser (and off this machine), set CLOUDFLARE_API_TOKEN instead."
   $WR login || die "login failed"
 else
   ok "already logged in as: $($WR whoami 2>&1 | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+' | head -1)"
@@ -107,10 +131,6 @@ ok "live at $URL"
 #    not a reminder printed underneath it after the deploy already looks done.
 say "Cloudflare Access"
 
-ENVFILE=.cf-access.env
-# shellcheck source=/dev/null
-[ -f "$ENVFILE" ] && . "$ENVFILE"
-
 WHO=$($WR whoami --json 2>/dev/null)
 
 # -- account id (asked for only if there is genuine ambiguity)
@@ -175,13 +195,20 @@ fi
 
 # -- remember it so the next run and the next app do not ask again
 umask 077
-cat > "$ENVFILE" <<ENVEOF
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  # The token came from the environment, which means this may not be Karl's own
+  # machine. Do not leave a copy of it on disk here — the env var is the source
+  # of truth for this run, and it dies with the shell.
+  ok "token came from CLOUDFLARE_API_TOKEN — deliberately not written to $ENVFILE"
+else
+  cat > "$ENVFILE" <<ENVEOF
 # Written by deploy.sh. Gitignored — this file holds a real API token.
 CF_ACCOUNT_ID=$CF_ACCOUNT_ID
 CF_API_TOKEN=$CF_API_TOKEN
 ACCESS_EMAILS=$ACCESS_EMAILS
 ENVEOF
-chmod 600 "$ENVFILE"
+  chmod 600 "$ENVFILE"
+fi
 
 # The pages.dev hostname is public too, so it gets its own application, and so
 # does the wildcard. Every deployment gets an immutable <hash>.$PROJECT.pages.dev

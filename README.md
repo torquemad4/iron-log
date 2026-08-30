@@ -105,6 +105,57 @@ bash deploy.sh
 rollback — not a deploy trigger. Pushing to `main` deploys nothing; `deploy.sh` pushes
 straight to Cloudflare with wrangler. Committing and deploying are two separate acts.
 
+## Deploying from another machine
+
+`deploy.sh` normally leans on `wrangler login`, whose OAuth token is stored on the
+machine that ran it. That is why the first deploy had to happen at the keyboard. To
+run it anywhere else, hand wrangler a token instead — it reads `CLOUDFLARE_API_TOKEN`
+natively, skips the browser entirely, and the script then needs no input at all.
+
+**Make a deploy-only token** at dash.cloudflare.com → My Profile → API Tokens →
+Create Custom Token. It is deliberately separate from the one on Skunkworks, so the
+travelling copy can be revoked on its own without breaking anything at home:
+
+| Scope | Permission |
+| --- | --- |
+| Account | Cloudflare Pages — Edit |
+| Account | D1 — Edit |
+| Account | Access: Apps and Policies — Edit |
+| Account | Account Settings — Read |
+| Zone | DNS — Edit |
+| Zone | Zone — Read |
+
+Account Resources: include the account. Zone Resources: include `torquemada.uk`.
+
+**Then, on the other machine:**
+
+```bash
+git clone git@github.com:torquemad4/iron-log.git && cd iron-log
+export CLOUDFLARE_API_TOKEN=...            # the deploy-only token
+export CLOUDFLARE_ACCOUNT_ID=...           # the account holding torquemada.uk
+export ACCESS_EMAILS=mfsecades@gmail.com,csainzmartinez@pm.me,csainzmartinez@gmail.com
+bash deploy.sh
+```
+
+That runs start to finish unattended. The one credential covers all of it: wrangler
+uses it to deploy, and `access.mjs` and `domain.mjs` reuse it for the Access
+applications and the DNS record.
+
+Two things worth knowing rather than discovering:
+
+- **The token is not written to disk on that machine.** When it arrives via
+  `CLOUDFLARE_API_TOKEN`, `deploy.sh` deliberately skips writing `.cf-access.env`,
+  so nothing is left behind on hardware that may not be yours. It lives in the shell
+  and dies with it. On Skunkworks, where there is no env var, the file is still
+  written and reused as before.
+- **Revoking it is the whole point.** If a machine is lost or you stop trusting it,
+  delete that one token in the dashboard. Skunkworks keeps working, because its
+  OAuth login and its own `.cf-access.env` are untouched.
+
+This does not change what deploying *is*. There is still no build integration and no
+CI: pushing to `main` deploys nothing, and someone still has to run `deploy.sh`
+on purpose. It only removes the requirement that the someone be sitting at Skunkworks.
+
 ---
 
 ## Costs
