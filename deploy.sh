@@ -181,12 +181,17 @@ ACCESS_EMAILS=$ACCESS_EMAILS
 ENVEOF
 chmod 600 "$ENVFILE"
 
-# The pages.dev hostname is public too, so it gets its own application.
-# Protecting only the custom domain would leave the back door wide open.
+# The pages.dev hostname is public too, so it gets its own application, and so
+# does the wildcard. Every deployment gets an immutable <hash>.$PROJECT.pages.dev
+# alias — production deploys included — and a direct-upload project has no
+# "preview deployments" toggle to switch off, because that hash URL is not a
+# preview branch, it is how Pages addresses each deployment. The wildcard
+# application is what actually closes it.
 PAGES_HOST="$PROJECT.pages.dev"
+PREVIEW_HOST="*.$PROJECT.pages.dev"
 
 ACCESS_OK=1
-for H in "$PAGES_HOST" "$APP_HOST"; do
+for H in "$PAGES_HOST" "$PREVIEW_HOST" "$APP_HOST"; do
   echo "  -- $H"
   CF_API_TOKEN="$CF_API_TOKEN" node access.mjs "$CF_ACCOUNT_ID" "$H" "$ACCESS_EMAILS" || ACCESS_OK=0
 done
@@ -217,10 +222,10 @@ ${BOLD}${GRN}Deployed.${OFF}
   custom domain:  ${CUSTOM:-not attached — see the warning above}
   Access:         $([ "$ACCESS_OK" = "1" ] && echo "on, for $ACCESS_EMAILS" || echo "${RED}NOT CONFIRMED${OFF}")
 
-${BOLD}One residual gap${OFF}, so you know rather than find out:
-  Per-deployment preview URLs (a hash in front of $PAGES_HOST) are not covered
-  by these two applications. Turn preview deployments off in the Pages project
-  settings if that bothers you.
+${BOLD}Behind Access${OFF} — all three, so there is no back door:
+  $APP_HOST
+  $PAGES_HOST
+  $PREVIEW_HOST  (covers every per-deployment hash URL)
 
 To ship a change later:  bash deploy.sh
 EOF
