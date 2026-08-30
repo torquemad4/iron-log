@@ -14,7 +14,7 @@ ok()   { echo -e "${GRN}  ok${OFF} $*"; }
 warn() { echo -e "${YEL}  !${OFF} $*"; }
 die()  { echo -e "${RED}  x${OFF} $*"; exit 1; }
 
-PROJECT=ironlog
+PROJECT=gym-torquemada
 DB=ironlog
 APP_HOST=gym.torquemada.uk
 
