@@ -2,7 +2,11 @@
 // ---------------------------------------------------------------------------
 // Cloudflare Access provisioning — PLATFORM PATTERN, reused by every app.
 //
-//   CF_API_TOKEN=... node access.mjs <account_id> <hostname> <email>[,<email>]
+//   CF_API_TOKEN=... APP_NAME="..." node access.mjs <account_id> <hostname> <email>[,<email>]
+//
+// APP_NAME only labels the application and its policy in the Cloudflare
+// dashboard. It is optional and defaults to the hostname, so this file stays
+// byte-identical across every app on the platform.
 //
 // Creates a self-hosted Access application for <hostname> and an allow policy
 // for the given emails. Idempotent: an application that already exists is
@@ -22,6 +26,8 @@ if (!ACCOUNT || !HOST || !EMAILS_RAW || !TOKEN) {
   console.error("usage: CF_API_TOKEN=... node access.mjs <account_id> <hostname> <emails>");
   process.exit(2);
 }
+
+const APP_NAME = process.env.APP_NAME || HOST;
 
 const EMAILS = EMAILS_RAW.split(",").map(s => s.trim()).filter(Boolean);
 if (!EMAILS.length) { console.error("  x no emails given"); process.exit(2); }
@@ -65,7 +71,7 @@ if (app) {
   console.log(`  ok application already exists (${app.id})`);
 } else {
   const created = await cf("POST", `${base}/apps`, {
-    name: `Iron Log (${HOST})`,
+    name: `${APP_NAME} (${HOST})`,
     domain: HOST,
     type: "self_hosted",
     session_duration: "24h",
@@ -88,7 +94,7 @@ if (existing.length) {
   console.log(`  ok policy already attached (${existing.length}) — leaving it alone`);
 } else {
   const rule = {
-    name: "Allow Karl",
+    name: `Allow — ${APP_NAME}`,
     decision: "allow",
     include: EMAILS.map(e => ({ email: { email: e } })),
     precedence: 1,
@@ -102,7 +108,7 @@ if (existing.length) {
   if (!made.ok) {
     console.log(`  ! app-scoped policy rejected (${firstError(made)}) — trying a reusable policy`);
     const reusable = await cf("POST", `${base}/policies`, {
-      name: `Allow Karl — ${HOST}`,
+      name: `Allow — ${APP_NAME} (${HOST})`,
       decision: "allow",
       include: EMAILS.map(e => ({ email: { email: e } })),
     });
