@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f12">
+<title>Iron Log</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏋️</text></svg>">
+<style>
+  :root{
+    --bg:#0d0f12; --panel:#161a20; --panel-2:#1e242c; --line:#2a323d;
+    --ink:#eef2f7; --muted:#8b97a8; --accent:#ff6b35; --accent-ink:#1a0d06;
+    --good:#3ddc97; --warn:#ffc857;
+    --tap:64px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:0 0 140px; overscroll-behavior-y:contain;
+  }
+  header{
+    position:sticky; top:0; z-index:20; background:rgba(13,15,18,.94);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+    padding:14px 16px 12px;
+  }
+  .hrow{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+  h1{font-size:19px; margin:0; letter-spacing:-.01em}
+  .day{color:var(--accent); font-weight:700}
+  .meta{color:var(--muted); font-size:13px; margin-top:3px; display:flex; gap:12px; flex-wrap:wrap}
+  .pill{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+    padding:3px 9px; border-radius:999px; border:1px solid var(--line); color:var(--muted)}
+  .pill.ok{color:var(--good); border-color:#20493c}
+  .pill.pending{color:var(--warn); border-color:#4a3d1a}
+  main{padding:16px; max-width:640px; margin:0 auto}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:16px; margin-bottom:14px}
+  .card.done{border-color:#20493c}
+  .exname{font-size:18px; font-weight:700; margin:0 0 2px; letter-spacing:-.01em}
+  .target{color:var(--muted); font-size:13px; margin-bottom:2px}
+  .last{color:var(--muted); font-size:13px; margin-bottom:14px}
+  .last b{color:var(--ink); font-weight:600}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; min-height:4px}
+  .chip{background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    padding:7px 11px; font-variant-numeric:tabular-nums; font-size:14px; font-weight:600}
+  .chip.fresh{border-color:var(--accent); color:var(--accent)}
+  .steppers{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px}
+  .stepper{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:8px}
+  .stepper .lab{font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); text-align:center; margin-bottom:4px; font-weight:700}
+  .srow{display:flex; align-items:center; justify-content:space-between; gap:4px}
+  .sbtn{width:44px; height:44px; flex:none; border-radius:10px; border:1px solid var(--line);
+    background:#0f1318; color:var(--ink); font-size:22px; font-weight:700; cursor:pointer}
+  .sbtn:active{background:var(--accent); color:var(--accent-ink)}
+  .sval{flex:1; text-align:center; font-size:26px; font-weight:800; font-variant-numeric:tabular-nums;
+    background:none; border:0; color:var(--ink); width:100%; padding:0; min-width:0}
+  .sval:focus{outline:2px solid var(--accent); border-radius:8px}
+  .logbtn{width:100%; min-height:var(--tap); border-radius:14px; border:0; cursor:pointer;
+    background:var(--accent); color:var(--accent-ink); font-size:17px; font-weight:800; letter-spacing:.01em}
+  .logbtn:active{transform:scale(.985)}
+  .logbtn[disabled]{background:var(--panel-2); color:var(--muted)}
+  .rest{position:fixed; left:0; right:0; bottom:0; z-index:30; background:var(--panel);
+    border-top:1px solid var(--line); padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+    display:none; align-items:center; gap:14px}
+  .rest.on{display:flex}
+  .rest .t{font-size:34px; font-weight:800; font-variant-numeric:tabular-nums; min-width:92px}
+  .rest .t.zero{color:var(--good)}
+  .rest .lab{color:var(--muted); font-size:13px; flex:1}
+  .rest button{min-height:46px; padding:0 16px; border-radius:12px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--ink); font-weight:700; cursor:pointer; font-size:15px}
+  .foot{display:flex; gap:10px; margin-top:20px}
+  .foot button{flex:1; min-height:54px; border-radius:14px; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink); font-weight:700; font-size:15px; cursor:pointer}
+  .foot button.primary{background:var(--good); color:#062018; border-color:transparent}
+  .rest-day{text-align:center; padding:34px 20px; color:var(--muted)}
+  .rest-day h2{color:var(--ink); font-size:22px; margin:0 0 8px}
+  .picker{display:flex; gap:6px; overflow-x:auto; padding:12px 16px 0; max-width:640px; margin:0 auto}
+  .picker button{flex:none; min-height:38px; padding:0 13px; border-radius:10px; font-size:13px;
+    font-weight:700; border:1px solid var(--line); background:var(--panel); color:var(--muted); cursor:pointer}
+  .picker button.sel{background:var(--accent); color:var(--accent-ink); border-color:transparent}
+  dialog{border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:16px; padding:20px; max-width:400px; width:calc(100% - 32px)}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  dialog h3{margin:0 0 14px; font-size:18px}
+  dialog label{display:block; font-size:12px; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--muted); font-weight:700; margin:12px 0 5px}
+  dialog input,dialog select,dialog textarea{width:100%; background:var(--panel-2); color:var(--ink);
+    border:1px solid var(--line); border-radius:10px; padding:11px; font-size:16px; font-family:inherit}
+  dialog .acts{display:flex; gap:10px; margin-top:18px}
+  dialog .acts button{flex:1; min-height:48px; border-radius:12px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--ink); font-weight:700; font-size:15px; cursor:pointer}
+  dialog .acts button.primary{background:var(--good); color:#062018; border-color:transparent}
+  .hist{font-size:14px}
+  .hist .h{padding:12px 0; border-bottom:1px solid var(--line)}
+  .hist .h:last-child{border-bottom:0}
+  .hist .hd{font-weight:700; margin-bottom:3px}
+  .hist .hl{color:var(--muted); font-variant-numeric:tabular-nums}
+  .empty{color:var(--muted); text-align:center; padding:26px 0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <h1>Iron Log</h1>
+    <span class="day" id="dayLabel">—</span>
+  </div>
+  <div class="meta">
+    <span id="clock">—</span>
+    <span id="elapsed"></span>
+    <span class="pill" id="sync">checking…</span>
+  </div>
+</header>
+
+<div class="picker" id="picker"></div>
+<main id="app"></main>
+
+<div class="rest" id="rest">
+  <div class="t" id="restT">0:00</div>
+  <div class="lab" id="restL">Rest</div>
+  <button id="restSkip">Skip</button>
+  <button id="restAdd">+30s</button>
+</div>
+
+<dialog id="endDlg">
+  <h3>Finish session</h3>
+  <label for="bw">Bodyweight (kg) — optional</label>
+  <input id="bw" type="number" step="0.01" inputmode="decimal" placeholder="86.26">
+  <label for="felt">How did it feel?</label>
+  <select id="felt">
+    <option value="Easy - add load next time">Easy — add load next time</option>
+    <option value="On track" selected>On track</option>
+    <option value="Hard - hold">Hard — hold here</option>
+    <option value="Needs deload">Needs deload</option>
+  </select>
+  <label for="notes">Notes — optional</label>
+  <textarea id="notes" rows="2" placeholder="Anything worth telling Claude"></textarea>
+  <div class="acts">
+    <button id="endCancel">Cancel</button>
+    <button id="endGo" class="primary">Finish &amp; sync</button>
+  </div>
+</dialog>
+
+<dialog id="histDlg">
+  <h3>Recent sessions</h3>
+  <div class="hist" id="histBody"><div class="empty">Loading…</div></div>
+  <div class="acts">
+    <button id="histExport">Export JSON</button>
+    <button id="histClose" class="primary">Close</button>
+  </div>
+</dialog>
+
+<script src="programme.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var OUTBOX = "ironlog.outbox.v1";
+  var LOCAL   = "ironlog.local.v1";
+  var STARTED = "ironlog.started.v1";
+
+  var state = {
+    day: null,          // day key being logged
+    date: todayISO(),
+    sets: [],           // sets logged today (local truth)
+    last: {},           // exercise -> previous session summary
+    restTimer: null,
+    restLeft: 0
+  };
+
+  // ---------- storage helpers ----------
+  function read(k, fb){ try{ var v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; }catch(e){ return fb; } }
+  function write(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function todayISO(){
+    var d = new Date(), p = function(n){ return String(n).padStart(2,"0"); };
+    return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());
+  }
+  function uid(){
+    if (self.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return "s-"+Date.now()+"-"+Math.random().toString(16).slice(2,10);
+  }
+
+  // ---------- sync ----------
+  function outbox(){ return read(OUTBOX, []); }
+  function queue(rec){
+    var q = outbox(); q.push(rec); write(OUTBOX, q);
+    paintSync(); flush();
+  }
+  var flushing = false;
+  function flush(){
+    var q = outbox();
+    if (!q.length || flushing || !navigator.onLine) { paintSync(); return; }
+    flushing = true;
+    fetch("/api/sets", {
+      method:"POST", headers:{"content-type":"application/json"},
+      body: JSON.stringify({ sets: q })
+    }).then(function(r){
+      if (!r.ok) throw new Error("http "+r.status);
+      return r.json();
+    }).then(function(){
+      // Only clear what we sent — anything logged mid-flight survives.
+      var now = outbox();
+      var sentIds = {}; q.forEach(function(s){ sentIds[s.id] = 1; });
+      write(OUTBOX, now.filter(function(s){ return !sentIds[s.id]; }));
+    }).catch(function(){
+      /* stays queued; retried on the interval, on focus and on reconnect */
+    }).then(function(){
+      flushing = false; paintSync();
+    });
+  }
+  function paintSync(){
+    var el = document.getElementById("sync"), n = outbox().length;
+    if (!navigator.onLine){ el.className = "pill pending"; el.textContent = "offline · "+n+" held"; return; }
+    if (n){ el.className = "pill pending"; el.textContent = n+" to sync"; return; }
+    el.className = "pill ok"; el.textContent = "synced";
+  }
+  setInterval(flush, 15000);
+  addEventListener("online", flush);
+  addEventListener("visibilitychange", function(){ if (!document.hidden) flush(); });
+
+  // ---------- clock ----------
+  function tick(){
+    var now = new Date();
+    document.getElementById("clock").textContent =
+      now.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+    var st = read(STARTED, null);
+    var e = document.getElementById("elapsed");
+    if (st && st.date === state.date){
+      var mins = Math.floor((Date.now() - st.at)/60000);
+      e.textContent = mins + " min in";
+      e.style.color = mins > 35 ? "var(--warn)" : "";
+    } else { e.textContent = ""; }
+  }
+  setInterval(tick, 1000);
+
+  // ---------- rest timer ----------
+  function startRest(secs, label){
+    state.restLeft = secs;
+    document.getElementById("restL").textContent = label || "Rest";
+    document.getElementById("rest").classList.add("on");
+    clearInterval(state.restTimer);
+    paintRest();
+    state.restTimer = setInterval(function(){
+      state.restLeft--;
+      paintRest();
+      if (state.restLeft <= -30) stopRest();
+    }, 1000);
+  }
+  function paintRest(){
+    var t = document.getElementById("restT"), s = state.restLeft;
+    var neg = s < 0, a = Math.abs(s);
+    t.textContent = (neg?"+":"") + Math.floor(a/60) + ":" + String(a%60).padStart(2,"0");
+    t.className = "t" + (s <= 0 ? " zero" : "");
+    if (s === 0 && navigator.vibrate) navigator.vibrate([120,60,120]);
+  }
+  function stopRest(){
+    clearInterval(state.restTimer);
+    document.getElementById("rest").classList.remove("on");
+  }
+  document.getElementById("restSkip").onclick = stopRest;
+  document.getElementById("restAdd").onclick = function(){ state.restLeft += 30; paintRest(); };
+
+  // ---------- data ----------
+  function loadLocal(){
+    var l = read(LOCAL, null);
+    if (l && l.date === state.date){ state.sets = l.sets || []; }
+    else { state.sets = []; }
+  }
+  function saveLocal(){ write(LOCAL, { date: state.date, sets: state.sets }); }
+
+  function fetchLast(day){
+    return fetch("/api/last?day="+encodeURIComponent(day))
+      .then(function(r){ return r.ok ? r.json() : {last:{}}; })
+      .then(function(j){ state.last = j.last || {}; })
+      .catch(function(){ state.last = {}; });
+  }
+
+  // ---------- rendering ----------
+  function setsFor(name){
+    return state.sets.filter(function(s){ return s.exercise === name; });
+  }
+
+  function render(){
+    var prog = window.PROGRAMME[state.day];
+    var app = document.getElementById("app");
+    document.getElementById("dayLabel").textContent = prog.label;
+
+    if (prog.kind !== "solo"){
+      app.innerHTML =
+        '<div class="card"><div class="rest-day">' +
+          '<h2>' + (prog.kind === "pt" ? "PT day" : "Rest day") + '</h2>' +
+          '<p>' + (prog.kind === "pt"
+             ? "Sophie's session. Numbers go in at the check-in, not here."
+             : "Nothing prescribed. Pick another day above if you want a flex session.") + '</p>' +
+        '</div></div>' + footHTML();
+      wireFoot();
+      return;
+    }
+
+    var html = "";
+    prog.exercises.forEach(function(ex, i){
+      var done = setsFor(ex.name);
+      var last = state.last[ex.name];
+      var complete = done.length >= ex.sets;
+      var prefill = suggest(ex, last, done);
+
+      html +=
+      '<div class="card'+(complete?" done":"")+'">' +
+        '<p class="exname">'+esc(ex.name)+'</p>' +
+        '<div class="target">'+ex.sets+' × '+ex.reps+' reps'+(ex.perSide?" per side":"")+' · '+ex.rest+'s rest</div>' +
+        '<div class="last">'+ (last
+            ? 'Last time: <b>'+esc(last.summary)+'</b>'+(last.date? ' · '+esc(last.date):'')
+            : 'No previous record — this one sets the baseline.') +'</div>' +
+        '<div class="chips">' +
+          done.map(function(s,idx){
+            return '<span class="chip'+(idx===done.length-1?" fresh":"")+'">'+s.reps+' × '+fmtW(s.weight)+'</span>';
+          }).join("") +
+        '</div>' +
+        '<div class="steppers">' +
+          stepperHTML(i,"reps","Reps",prefill.reps,1) +
+          stepperHTML(i,"weight",ex.band?"Band level":"Weight kg",prefill.weight,ex.step||(ex.band?1:2.5)) +
+        '</div>' +
+        '<button class="logbtn" data-log="'+i+'">' +
+          (complete ? "Log an extra set" : "Log set "+(done.length+1)+" of "+ex.sets) +
+        '</button>' +
+      '</div>';
+    });
+
+    app.innerHTML = html + footHTML();
+    wireCards();
+    wireFoot();
+  }
+
+  function suggest(ex, last, done){
+    if (done.length) return { reps: done[done.length-1].reps, weight: done[done.length-1].weight };
+    if (last && last.topReps != null) return { reps: last.topReps, weight: last.topWeight };
+    var lo = parseInt(String(ex.reps).split("-")[0], 10) || 10;
+    return { reps: lo, weight: 0 };
+  }
+
+  function stepperHTML(i, field, label, val, step){
+    return '<div class="stepper">' +
+      '<div class="lab">'+label+'</div>' +
+      '<div class="srow">' +
+        '<button class="sbtn" data-step="'+i+'|'+field+'|-'+step+'">−</button>' +
+        '<input class="sval" inputmode="decimal" data-f="'+i+'|'+field+'" value="'+val+'">' +
+        '<button class="sbtn" data-step="'+i+'|'+field+'|'+step+'">+</button>' +
+      '</div></div>';
+  }
+
+  function footHTML(){
+    return '<div class="foot">' +
+      '<button id="btnHist">History</button>' +
+      '<button id="btnEnd" class="primary">End session</button>' +
+    '</div>';
+  }
+
+  function wireCards(){
+    document.querySelectorAll("[data-step]").forEach(function(b){
+      b.onclick = function(){
+        var p = b.dataset.step.split("|");
+        var inp = document.querySelector('[data-f="'+p[0]+"|"+p[1]+'"]');
+        var v = (parseFloat(inp.value)||0) + parseFloat(p[2]);
+        if (v < 0) v = 0;
+        inp.value = fmtW(v);
+      };
+    });
+    document.querySelectorAll("[data-log]").forEach(function(b){
+      b.onclick = function(){ logSet(parseInt(b.dataset.log,10)); };
+    });
+  }
+
+  function wireFoot(){
+    var h = document.getElementById("btnHist"), e = document.getElementById("btnEnd");
+    if (h) h.onclick = showHistory;
+    if (e) e.onclick = function(){ document.getElementById("endDlg").showModal(); };
+  }
+
+  function logSet(i){
+    var ex = window.PROGRAMME[state.day].exercises[i];
+    var reps   = parseFloat(document.querySelector('[data-f="'+i+'|reps"]').value) || 0;
+    var weight = parseFloat(document.querySelector('[data-f="'+i+'|weight"]').value) || 0;
+    if (reps <= 0) return;
+
+    if (!read(STARTED, null) || read(STARTED,{}).date !== state.date){
+      write(STARTED, { date: state.date, at: Date.now() });
+    }
+
+    var rec = {
+      id: uid(), date: state.date, day: state.day, exercise: ex.name,
+      set_index: setsFor(ex.name).length + 1,
+      reps: reps, weight: weight, ts: new Date().toISOString()
+    };
+    state.sets.push(rec);
+    saveLocal();
+    queue(rec);
+    render();
+    startRest(ex.rest, "Rest — " + ex.name);
+  }
+
+  // ---------- end session ----------
+  document.getElementById("endCancel").onclick = function(){ document.getElementById("endDlg").close(); };
+  document.getElementById("endGo").onclick = function(){
+    var body = {
+      date: state.date, day: state.day,
+      bodyweight: parseFloat(document.getElementById("bw").value) || null,
+      felt: document.getElementById("felt").value,
+      notes: document.getElementById("notes").value || "",
+      started_at: (read(STARTED,{}) || {}).at || null,
+      sets: state.sets
+    };
+    var btn = this; btn.disabled = true; btn.textContent = "Syncing…";
+    flush();
+    fetch("/api/session/end", {
+      method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body)
+    }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        btn.disabled = false; btn.textContent = "Finish & sync";
+        document.getElementById("endDlg").close();
+        if (res.ok && res.j.notion) {
+          alert("Session saved and written to the Notion Training Log.");
+        } else {
+          alert("Session saved to the log. Notion push did not complete — the check-in will pick it up.\n\n" + (res.j.error || ""));
+        }
+        localStorage.removeItem(STARTED);
+        stopRest();
+      })
+      .catch(function(){
+        btn.disabled = false; btn.textContent = "Finish & sync";
+        alert("No network. The session is held locally and will sync when you're back online.");
+      });
+  };
+
+  // ---------- history ----------
+  function showHistory(){
+    var dlg = document.getElementById("histDlg"), body = document.getElementById("histBody");
+    body.innerHTML = '<div class="empty">Loading…</div>';
+    dlg.showModal();
+    fetch("/api/history?limit=15").then(function(r){ return r.json(); }).then(function(j){
+      if (!j.sessions || !j.sessions.length){ body.innerHTML = '<div class="empty">Nothing logged yet.</div>'; return; }
+      body.innerHTML = j.sessions.map(function(s){
+        return '<div class="h"><div class="hd">'+esc(s.date)+' · '+esc(s.day)+'</div>' +
+               '<div class="hl">'+esc(s.summary)+'</div></div>';
+      }).join("");
+    }).catch(function(){
+      body.innerHTML = '<div class="empty">Offline — history lives on the server.</div>';
+    });
+  }
+  document.getElementById("histClose").onclick = function(){ document.getElementById("histDlg").close(); };
+  document.getElementById("histExport").onclick = function(){
+    fetch("/api/history?limit=1000&raw=1").then(function(r){ return r.json(); }).then(function(j){
+      var blob = new Blob([JSON.stringify(j, null, 2)], {type:"application/json"});
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "ironlog-" + state.date + ".json";
+      a.click();
+    });
+  };
+
+  // ---------- misc ----------
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function fmtW(w){ var n = Math.round(parseFloat(w)*100)/100; return String(n); }
+
+  function buildPicker(){
+    var p = document.getElementById("picker");
+    var names = {sun:"Sun",mon:"Mon",tue:"Tue",wed:"Wed",thu:"Thu",fri:"Fri",sat:"Sat"};
+    p.innerHTML = window.DAY_KEYS.map(function(k){
+      return '<button data-d="'+k+'"'+(k===state.day?' class="sel"':'')+'>'+names[k]+'</button>';
+    }).join("");
+    p.querySelectorAll("button").forEach(function(b){
+      b.onclick = function(){
+        state.day = b.dataset.d;
+        buildPicker();
+        fetchLast(state.day).then(render);
+      };
+    });
+  }
+
+  // ---------- boot ----------
+  state.day = window.DAY_KEYS[new Date().getDay()];
+  loadLocal();
+  // If sets were already logged today under a different day key, follow them.
+  if (state.sets.length && state.sets[0].day) state.day = state.sets[0].day;
+  buildPicker();
+  tick();
+  paintSync();
+  render();
+  fetchLast(state.day).then(render);
+  flush();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+# Iron Log
+
+Karl's training log. Cloudflare Pages + Pages Functions + D1.
+
+Replaces the localStorage artifact, which only ever existed on one browser on one
+machine. History now lives server-side in D1 and is readable from any device.
+
+---
+
+## What it does
+
+- Opens straight onto today's session. Three exercises, no navigation to reach them.
+- Shows last session's numbers per lift and prefills reps/weight from them.
+- One tap logs a set. Rest timer starts automatically.
+- **Offline-first.** Sets are written to `localStorage` the instant you tap, then
+  synced to D1 in the background. If the gym network drops mid-set you lose nothing;
+  the queue drains when you're back. The header pill tells you which state you're in.
+- "End session" closes the session and writes one row into the Notion Training Log.
+
+The programme lives in `public/programme.js` — one place, edit it there.
+
+---
+
+## Deploy it
+
+```bash
+bash deploy.sh
+```
+
+That is the whole thing. The script is idempotent — if it fails halfway, fix the cause
+and run it again; anything already created is detected and skipped.
+
+It will:
+
+1. check node and install wrangler on first run
+2. open a browser once for Cloudflare login
+3. create the D1 database and write its real id into `wrangler.toml`
+4. create the tables from `schema.sql`
+5. create the Pages project and deploy
+6. optionally take a Notion token and set it as a secret
+7. create the Access application and allow policy, and verify them
+8. attach the custom domain — **only if step 7 succeeded**
+
+It prints the live URL at the end.
+
+### Access is not optional, and not manual
+
+⭐ **`deploy.sh` creates the Cloudflare Access application itself** and will not attach
+`gym.torquemada.uk` unless it succeeds. There is nothing to remember afterwards and no
+window in which the URL is live but unprotected.
+
+It protects **two** hostnames — the custom domain and `ironlog.pages.dev` — because
+protecting only the pretty one leaves the back door open.
+
+The first run asks for an API token once, then stores it in `.cf-access.env`
+(gitignored, `chmod 600`) so no later run asks again. To create it:
+
+> dash.cloudflare.com → **My Profile** → **API Tokens** → **Create Token**
+> → **Create Custom Token**
+> Permissions: **Account | Access: Apps and Policies | Edit**
+> Account Resources: **Include** | your account
+
+The provisioning itself lives in **`access.mjs`**, deliberately separate from
+`deploy.sh`. ⭐ It is the platform pattern — app two copies that file rather than
+reinventing it, and Clousto Kitchen's two-email policy is a comma in `ACCESS_EMAILS`,
+not a build.
+
+**Residual gap, stated rather than hidden:** per-deployment preview URLs (a hash in
+front of `ironlog.pages.dev`) are not covered. Turn preview deployments off in the
+Pages project settings if that matters.
+
+### Notion sync — what to have ready
+
+The script asks for a token. To get one:
+
+1. https://www.notion.so/my-integrations → **New integration**, name it `Iron Log`,
+   capabilities: **Insert content** only.
+2. Copy the **Internal Integration Secret**.
+3. In Notion, open the **🏋️ Training Log** database → `...` → **Connections** →
+   **Connect to** → `Iron Log`. ⚠️ Without this the integration cannot see the database
+   and the push fails with "object not found".
+
+Skipping it is fine — sessions still save to D1 and the daily check-in picks them up.
+
+### Custom domain
+
+`torquemada.uk` is already on Cloudflare DNS, so the script attaches
+`gym.torquemada.uk` itself and Cloudflare creates the CNAME. The certificate takes a
+few minutes to issue. If the CLI cannot claim it, the script says so and the dashboard
+path is Pages project → **Custom domains** → **Set up a custom domain**.
+
+---
+
+## Local development
+
+```bash
+npm install
+npm run db:local     # create the local tables
+npm run dev          # http://localhost:8788
+```
+
+The local database is a separate sqlite file under `.wrangler/` — nothing you do
+locally touches production.
+
+---
+
+## Deploying changes
+
+```bash
+bash deploy.sh
+```
+
+⚠️ **There is no GitHub build integration.** The repo is version control — history and
+rollback — not a deploy trigger. Pushing to `main` deploys nothing; `deploy.sh` pushes
+straight to Cloudflare with wrangler. Committing and deploying are two separate acts.
+
+---
+
+## Costs
+
+Nothing. D1's free tier is 5 GB and 5 million row reads a day; a training session is
+about ten rows. Pages is free for this. Access is free up to 50 users.
+
+---
+
+## Notes on the design
+
+**Why the client generates set IDs.** Every set gets a UUID from the browser, and the
+insert is `INSERT OR IGNORE`. A retried batch after a dropped connection writes
+nothing the second time, so the offline queue can be aggressive about resending
+without ever creating phantom sets.
+
+**Why the session end reads sets back from D1.** The Notion row is built from what
+actually got stored, not from what the browser thought it sent. If a set failed to
+sync, the Notion row reflects reality rather than optimism.
+
+**Why a failed Notion push is not an error.** The session is committed to D1 first.
+Notion being down, or the token being wrong, costs you the convenience of the
+automatic row — never the training data.

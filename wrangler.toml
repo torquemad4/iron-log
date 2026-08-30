@@ -1,0 +1,10 @@
+name = "ironlog"
+pages_build_output_dir = "public"
+compatibility_date = "2026-08-30"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ironlog"
+# ⚠️ REPLACE THIS. It is a dummy id so `npm run dev` works out of the box.
+# Put your real D1 database id here before deploying — see README step 2.
+database_id = "00000000-0000-4000-8000-000000000001"
