@@ -151,6 +151,7 @@ if [ -z "${CF_API_TOKEN:-}" ]; then
     dash.cloudflare.com -> My Profile -> API Tokens -> Create Token
     -> Create Custom Token
        Permissions:        Account | Access: Apps and Policies | Edit
+                           Account | Cloudflare Pages             | Edit
        Account Resources:  Include | the account above
 
 TOK
@@ -191,21 +192,21 @@ for H in "$PAGES_HOST" "$APP_HOST"; do
 done
 
 # ---------------------------------------------------------------- 7. domain
+# `wrangler pages domain add` was removed in wrangler 4.x, so this goes through
+# the Pages REST API. Still gated on ACCESS_OK: the protection remains a
+# precondition of the public hostname.
 say "Custom domain $APP_HOST"
 CUSTOM=""
 if [ "$ACCESS_OK" != "1" ]; then
   warn "Access is NOT confirmed, so the custom domain will not be attached."
   warn "Fix the error above and re-run: bash deploy.sh"
   warn "Nothing is lost — the app is deployed, it just has no public hostname yet."
-elif $WR pages domain list --project-name "$PROJECT" 2>/dev/null | grep -q "$APP_HOST"; then
-  ok "already attached"
-  CUSTOM="https://$APP_HOST"
-elif $WR pages domain add "$APP_HOST" --project-name "$PROJECT" >/dev/null 2>&1; then
-  ok "attached — certificate takes a few minutes to issue"
+elif CF_API_TOKEN="$CF_API_TOKEN" node domain.mjs "$CF_ACCOUNT_ID" "$PROJECT" "$APP_HOST"; then
   CUSTOM="https://$APP_HOST"
 else
-  warn "could not attach it from the CLI. Do it in the dashboard:"
-  warn "  Pages project -> Custom domains -> Set up a custom domain -> $APP_HOST"
+  warn "the custom domain was not attached — see the error above."
+  warn "Access is confirmed, so nothing is exposed. Re-run once that is fixed:"
+  warn "  bash deploy.sh"
 fi
 
 # ---------------------------------------------------------------- done
