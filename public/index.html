@@ -418,10 +418,12 @@
       .then(function(res){
         btn.disabled = false; btn.textContent = "Finish & sync";
         document.getElementById("endDlg").close();
-        if (res.ok && res.j.notion) {
-          alert("Session saved and written to the Notion Training Log.");
+        if (res.ok && res.j.ok) {
+          var j = res.j;
+          alert("Session saved — " + j.sets + " sets across " + j.exercises + " exercises"
+                + (j.minutes != null ? ", " + j.minutes + " min" : "") + ".");
         } else {
-          alert("Session saved to the log. Notion push did not complete — the check-in will pick it up.\n\n" + (res.j.error || ""));
+          alert("Saved locally, but the server did not confirm. It will retry.\n\n" + (res.j.error || ""));
         }
         localStorage.removeItem(STARTED);
         stopRest();

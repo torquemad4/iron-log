@@ -101,21 +101,7 @@ URL=$(echo "$DEPLOY_OUT" | grep -oE 'https://[a-z0-9.-]+\.pages\.dev' | tail -1)
 [ -n "$URL" ] || die "deploy did not report a URL — see output above"
 ok "live at $URL"
 
-# ---------------------------------------------------------------- 6. secrets
-say "Notion sync (optional — press ENTER twice to skip)"
-echo "  Paste your Notion internal integration secret, or press ENTER to skip."
-read -r -s -p "  NOTION_TOKEN: " TOKEN; echo
-if [ -n "$TOKEN" ]; then
-  printf '%s' "$TOKEN" | $WR pages secret put NOTION_TOKEN --project-name "$PROJECT" >/dev/null 2>&1 \
-    && ok "NOTION_TOKEN set" || warn "could not set NOTION_TOKEN"
-  printf '%s' "a7a09d49e445477abf087b672b546fdf" | $WR pages secret put NOTION_DB --project-name "$PROJECT" >/dev/null 2>&1 \
-    && ok "NOTION_DB set" || warn "could not set NOTION_DB"
-  warn "Re-run 'bash deploy.sh' once more so the deployment picks the secrets up."
-else
-  warn "skipped — sessions will still save to D1, the check-in picks them up"
-fi
-
-# ---------------------------------------------------------------- 7. Access
+# ---------------------------------------------------------------- 6. Access
 # ⛔ This runs BEFORE the custom domain, and the domain step below only happens
 #    if this succeeds. The protection is a PRECONDITION of the public hostname,
 #    not a reminder printed underneath it after the deploy already looks done.
@@ -204,7 +190,7 @@ for H in "$PAGES_HOST" "$APP_HOST"; do
   CF_API_TOKEN="$CF_API_TOKEN" node access.mjs "$CF_ACCOUNT_ID" "$H" "$ACCESS_EMAILS" || ACCESS_OK=0
 done
 
-# ---------------------------------------------------------------- 8. domain
+# ---------------------------------------------------------------- 7. domain
 say "Custom domain $APP_HOST"
 CUSTOM=""
 if [ "$ACCESS_OK" != "1" ]; then

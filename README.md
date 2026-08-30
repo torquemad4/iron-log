@@ -15,7 +15,7 @@ machine. History now lives server-side in D1 and is readable from any device.
 - **Offline-first.** Sets are written to `localStorage` the instant you tap, then
   synced to D1 in the background. If the gym network drops mid-set you lose nothing;
   the queue drains when you're back. The header pill tells you which state you're in.
-- "End session" closes the session and writes one row into the Notion Training Log.
+- "End session" closes the session in D1 and confirms what was stored.
 
 The programme lives in `public/programme.js` — one place, edit it there.
 
@@ -37,9 +37,8 @@ It will:
 3. create the D1 database and write its real id into `wrangler.toml`
 4. create the tables from `schema.sql`
 5. create the Pages project and deploy
-6. optionally take a Notion token and set it as a secret
-7. create the Access application and allow policy, and verify them
-8. attach the custom domain — **only if step 7 succeeded**
+6. create the Access application and allow policy, and verify them
+7. attach the custom domain — **only if step 6 succeeded**
 
 It prints the live URL at the end.
 
@@ -68,19 +67,6 @@ not a build.
 **Residual gap, stated rather than hidden:** per-deployment preview URLs (a hash in
 front of `ironlog.pages.dev`) are not covered. Turn preview deployments off in the
 Pages project settings if that matters.
-
-### Notion sync — what to have ready
-
-The script asks for a token. To get one:
-
-1. https://www.notion.so/my-integrations → **New integration**, name it `Iron Log`,
-   capabilities: **Insert content** only.
-2. Copy the **Internal Integration Secret**.
-3. In Notion, open the **🏋️ Training Log** database → `...` → **Connections** →
-   **Connect to** → `Iron Log`. ⚠️ Without this the integration cannot see the database
-   and the push fails with "object not found".
-
-Skipping it is fine — sessions still save to D1 and the daily check-in picks them up.
 
 ### Custom domain
 
@@ -130,10 +116,11 @@ insert is `INSERT OR IGNORE`. A retried batch after a dropped connection writes
 nothing the second time, so the offline queue can be aggressive about resending
 without ever creating phantom sets.
 
-**Why the session end reads sets back from D1.** The Notion row is built from what
-actually got stored, not from what the browser thought it sent. If a set failed to
-sync, the Notion row reflects reality rather than optimism.
+**Why the session end counts sets back out of D1.** The confirmation is built from
+what actually got stored, not from what the browser thought it sent. If a set failed to
+sync, the number you see reflects reality rather than optimism.
 
-**Why a failed Notion push is not an error.** The session is committed to D1 first.
-Notion being down, or the token being wrong, costs you the convenience of the
-automatic row — never the training data.
+**Why there is no second store.** ⭐ D1 is the whole record. An earlier draft also
+pushed each finished session into a Notion database, which meant two places holding the
+same training history and a reconciliation problem the first time they disagreed.
+Anything hosted on Cloudflare keeps its data on Cloudflare.

@@ -1,6 +1,6 @@
 -- Iron Log — D1 schema
 -- One row per set, one row per session. The set table is the truth;
--- the session table carries how it felt and where it landed in Notion.
+-- the session table carries how it felt. D1 is the whole record.
 
 CREATE TABLE IF NOT EXISTS sets (
   id         TEXT PRIMARY KEY,      -- client-generated, makes retries idempotent
@@ -26,6 +26,5 @@ CREATE TABLE IF NOT EXISTS sessions (
   bodyweight     REAL,
   felt           TEXT,
   notes          TEXT,
-  notion_page_id TEXT,
   PRIMARY KEY (date, day)
 );
