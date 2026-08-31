@@ -37,6 +37,14 @@
   .card{background:var(--panel); border:1px solid var(--line); border-radius:16px;
     padding:16px; margin-bottom:14px}
   .card.done{border-color:#20493c}
+  .exhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .formlink{
+    flex:none;font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;
+    border:1px solid var(--line);border-radius:8px;padding:6px 10px;white-space:nowrap;
+    min-height:32px;display:inline-flex;align-items:center;
+  }
+  .formlink:hover,.formlink:focus-visible{border-color:var(--accent);background:var(--panel-2)}
+  .formlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .exname{font-size:18px; font-weight:700; margin:0 0 2px; letter-spacing:-.01em}
   .target{color:var(--muted); font-size:13px; margin-bottom:2px}
   .last{color:var(--muted); font-size:13px; margin-bottom:14px}
@@ -277,6 +285,14 @@
   }
 
   // ---------- rendering ----------
+  // A SEARCH, not a chosen video. A hardcoded link rots — the channel deletes
+  // it, the video goes private — and it rots silently, which at the rack is
+  // worse than no link. A search always resolves to current results.
+  function formLink(name){
+    return "https://www.youtube.com/results?search_query=" +
+           encodeURIComponent(name + " proper form");
+  }
+
   function setsFor(name){
     return state.sets.filter(function(s){ return s.exercise === name; });
   }
@@ -307,7 +323,10 @@
 
       html +=
       '<div class="card'+(complete?" done":"")+'">' +
-        '<p class="exname">'+esc(ex.name)+'</p>' +
+        '<div class="exhead">' +
+          '<p class="exname">'+esc(ex.name)+'</p>' +
+          '<a class="formlink" href="'+formLink(ex.name)+'" target="_blank" rel="noopener noreferrer">Form &#8599;</a>' +
+        '</div>' +
         '<div class="target">'+ex.sets+' × '+ex.reps+' reps'+(ex.perSide?" per side":"")+' · '+ex.rest+'s rest</div>' +
         '<div class="last">'+ (last
             ? 'Last time: <b>'+esc(last.summary)+'</b>'+(last.date? ' · '+esc(last.date):'')
