@@ -37,6 +37,13 @@
   .card{background:var(--panel); border:1px solid var(--line); border-radius:16px;
     padding:16px; margin-bottom:14px}
   .card.done{border-color:#20493c}
+  .prow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+  .prow .wide{flex:1 1 100%;text-align:left}
+  .plabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    padding-right:2px;flex:none}
+  .pmark{opacity:.7;font-weight:400}
+  .card.outstanding{border-left:3px solid var(--warn);background:var(--panel-2);
+    font-size:14px;line-height:1.5}
   .exhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
   .formlink{
     flex:none;font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;
@@ -169,7 +176,10 @@
   var STARTED = "ironlog.started.v1";
 
   var state = {
-    day: null,          // day key being logged
+    day: null,          // weekday key of the CORE session in view
+    mode: "core",       // "core" | "bonus" — a bonus never replaces a core
+    bonusId: null,      // which of the five, when mode === "bonus"
+    week: null,         // /api/week-status, so an unlogged core stays outstanding
     date: todayISO(),
     sets: [],           // sets logged today (local truth)
     last: {},           // exercise -> previous session summary
@@ -277,11 +287,23 @@
   }
   function saveLocal(){ write(LOCAL, { date: state.date, sets: state.sets }); }
 
-  function fetchLast(day){
-    return fetch("/api/last?day="+encodeURIComponent(day))
+  function fetchLast(){
+    var sess = currentSession();
+    var names = (sess && sess.exercises) ? sess.exercises.map(function(e){ return e.name; }) : [];
+    if (!names.length) { state.last = {}; return Promise.resolve(); }
+    var q = names.map(function(n){ return "ex=" + encodeURIComponent(n); }).join("&") +
+            "&date=" + encodeURIComponent(state.date) + "&day=" + encodeURIComponent(logDay());
+    return fetch("/api/last?" + q)
       .then(function(r){ return r.ok ? r.json() : {last:{}}; })
       .then(function(j){ state.last = j.last || {}; })
       .catch(function(){ state.last = {}; });
+  }
+
+  function fetchWeek(){
+    return fetch("/api/week-status?date=" + encodeURIComponent(state.date))
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ if (j && j.core) state.week = j; })
+      .catch(function(){ /* the picker degrades to "not known", never to "done" */ });
   }
 
   // ---------- rendering ----------
@@ -293,28 +315,88 @@
            encodeURIComponent(name + " proper form");
   }
 
+  // ---------- which session is in view ----------
+  function currentSession(){
+    if (state.mode === "bonus") return window.BONUS[state.bonusId] || null;
+    return window.sessionForDay(state.day);
+  }
+  function isBonus(){ return state.mode === "bonus"; }
+
+  // The weekend session floats between Sat and Sun and is ONE session, so both
+  // days log under the same key. Otherwise a Saturday session and a Sunday one
+  // would look like two different sessions in the history.
+  function coreDayKey(){
+    var s = window.sessionForDay(state.day);
+    return (s && s.floats) ? "weekend" : state.day;
+  }
+  // What actually goes in the `day` column. Bonus sets are namespaced so core
+  // and bonus stay separable in D1 and the volume maths stays right.
+  function logDay(){ return isBonus() ? ("bonus:" + state.bonusId) : coreDayKey(); }
+
+  // Any sets logged today for the session in view.
+  function setsToday(){
+    var d = logDay();
+    return state.sets.some(function(s){ return s.day === d; });
+  }
+  // Tue and Fri prescribe nothing, so nothing is outstanding on them.
+  function coreIsPrescribed(){
+    var s = window.sessionForDay(state.day);
+    return !!(s && s.kind === "core");
+  }
+
+  function coreLogged(){
+    var k = coreDayKey(), w = state.week && state.week.core;
+    return !!(w && w[k] && w[k].sets > 0);
+  }
+  // Saturday's session done means Sunday must not offer it again.
+  function weekendDone(){
+    var w = state.week && state.week.core;
+    return !!(w && w.weekend && w.weekend.sets > 0);
+  }
+
   function setsFor(name){
-    return state.sets.filter(function(s){ return s.exercise === name; });
+    // Scoped to the session in view: the same lift can appear in today's core
+    // AND in a bonus session later the same day, and they are different sets.
+    var d = logDay();
+    return state.sets.filter(function(s){ return s.exercise === name && s.day === d; });
   }
 
   function render(){
-    var prog = window.PROGRAMME[state.day];
+    var prog = currentSession();
     var app = document.getElementById("app");
-    document.getElementById("dayLabel").textContent = prog.label;
+    document.getElementById("dayLabel").textContent =
+      prog ? (isBonus() ? "Bonus — " + prog.label : prog.label) : "—";
 
-    if (prog.kind !== "solo"){
+    if (!prog || prog.kind === "pt"){
       app.innerHTML =
         '<div class="card"><div class="rest-day">' +
-          '<h2>' + (prog.kind === "pt" ? "PT day" : "Rest day") + '</h2>' +
-          '<p>' + (prog.kind === "pt"
-             ? "Sophie's session. Trainerize has the numbers — nothing to log here."
-             : "Nothing prescribed. Pick another day above if you want a flex session.") + '</p>' +
+          '<h2>PT day</h2>' +
+          '<p>Sophie&rsquo;s session. Trainerize has the numbers &mdash; nothing to log here. ' +
+             'A bonus session below is still yours to do if you want one.</p>' +
         '</div></div>' + footHTML();
       wireFoot();
       return;
     }
 
-    var html = "";
+    // The weekend session is one session across two days. If it was done on
+    // Saturday, Sunday offers bonus work instead of offering it twice.
+    if (!isBonus() && prog.floats && weekendDone() && !setsToday()){
+      app.innerHTML =
+        '<div class="card"><div class="rest-day">' +
+          '<h2>Weekend session done</h2>' +
+          '<p>Logged already this week, so there is nothing core left. ' +
+             'Pick a bonus session above if you fancy one.</p>' +
+        '</div></div>' + footHTML();
+      wireFoot();
+      return;
+    }
+
+    var outstanding = isBonus() && !coreLogged() && coreIsPrescribed();
+    var html = outstanding
+      ? '<div class="card outstanding"><b>Today&rsquo;s core session is still outstanding.</b> ' +
+        'A bonus adds to the week; it does not stand in for a core day.</div>'
+      : "";
+
     prog.exercises.forEach(function(ex, i){
       var done = setsFor(ex.name);
       var last = state.last[ex.name];
@@ -327,7 +409,7 @@
           '<p class="exname">'+esc(ex.name)+'</p>' +
           '<a class="formlink" href="'+formLink(ex.name)+'" target="_blank" rel="noopener noreferrer">Form &#8599;</a>' +
         '</div>' +
-        '<div class="target">'+ex.sets+' × '+ex.reps+' reps'+(ex.perSide?" per side":"")+' · '+ex.rest+'s rest</div>' +
+        '<div class="target">'+ex.sets+' × '+ex.reps+' reps'+(ex.side?" per side":"")+' · '+ex.rest+'s rest</div>' +
         '<div class="last">'+ (last
             ? 'Last time: <b>'+esc(last.summary)+'</b>'+(last.date? ' · '+esc(last.date):'')
             : 'No previous record — this one sets the baseline.') +'</div>' +
@@ -397,7 +479,7 @@
   }
 
   function logSet(i){
-    var ex = window.PROGRAMME[state.day].exercises[i];
+    var ex = currentSession().exercises[i];
     var reps   = parseFloat(document.querySelector('[data-f="'+i+'|reps"]').value) || 0;
     var weight = parseFloat(document.querySelector('[data-f="'+i+'|weight"]').value) || 0;
     if (reps <= 0) return;
@@ -407,7 +489,7 @@
     }
 
     var rec = {
-      id: uid(), date: state.date, day: state.day, exercise: ex.name,
+      id: uid(), date: state.date, day: logDay(), exercise: ex.name,
       set_index: setsFor(ex.name).length + 1,
       reps: reps, weight: weight, ts: new Date().toISOString()
     };
@@ -422,13 +504,14 @@
   document.getElementById("endCancel").onclick = function(){ document.getElementById("endDlg").close(); };
   document.getElementById("endGo").onclick = function(){
     var body = {
-      date: state.date, day: state.day,
+      date: state.date, day: logDay(),
       bodyweight: parseFloat(document.getElementById("bw").value) || null,
       felt: document.getElementById("felt").value,
       notes: document.getElementById("notes").value || "",
       started_at: (read(STARTED,{}) || {}).at || null,
       sets: state.sets
     };
+    var wasBonus = isBonus();
     var btn = this; btn.disabled = true; btn.textContent = "Syncing…";
     flush();
     fetch("/api/session/end", {
@@ -439,8 +522,14 @@
         document.getElementById("endDlg").close();
         if (res.ok && res.j.ok) {
           var j = res.j;
-          alert("Session saved — " + j.sets + " sets across " + j.exercises + " exercises"
-                + (j.minutes != null ? ", " + j.minutes + " min" : "") + ".");
+          var msg = "Session saved — " + j.sets + " sets across " + j.exercises + " exercises"
+                + (j.minutes != null ? ", " + j.minutes + " min" : "") + ".";
+          // The fuelling rule fires at the moment it applies, so nothing has to
+          // be remembered later. Bonus sessions only.
+          if (wasBonus && window.BONUS_TOPUP) {
+            msg += "\n\n🍫 " + window.BONUS_TOPUP.prompt + "\n" + window.BONUS_TOPUP.detail;
+          }
+          alert(msg);
         } else {
           alert("Saved locally, but the server did not confirm. It will retry.\n\n" + (res.j.error || ""));
         }
@@ -484,17 +573,42 @@
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
   function fmtW(w){ var n = Math.round(parseFloat(w)*100)/100; return String(n); }
 
+  // Two choices, not seven days: today's core session, or a bonus.
   function buildPicker(){
     var p = document.getElementById("picker");
-    var names = {sun:"Sun",mon:"Mon",tue:"Tue",wed:"Wed",thu:"Thu",fri:"Fri",sat:"Sat"};
-    p.innerHTML = window.DAY_KEYS.map(function(k){
-      return '<button data-d="'+k+'"'+(k===state.day?' class="sel"':'')+'>'+names[k]+'</button>';
-    }).join("");
+    var core = window.sessionForDay(state.day);
+    var coreOn = !isBonus();
+    var h = "";
+
+    if (core && core.kind === "core" && !(core.floats && weekendDone() && !coreOn)) {
+      var mark = coreLogged() ? " · done" : (state.week ? " · not yet" : "");
+      h += '<div class="prow">' +
+             '<button class="wide' + (coreOn ? ' sel' : '') + '" data-core="1">' +
+               esc(core.label) + '<span class="pmark">' + mark + '</span>' +
+             '</button>' +
+           '</div>';
+    } else if (core && core.kind === "pt") {
+      h += '<div class="prow"><button class="wide' + (coreOn ? ' sel' : '') +
+           '" data-core="1">PT with Sophie<span class="pmark"> · not logged here</span></button></div>';
+    }
+
+    h += '<div class="prow bonusrow"><span class="plabel">Bonus</span>' +
+         Object.keys(window.BONUS).map(function(id){
+           var b = window.BONUS[id];
+           var did = (state.week && state.week.bonus || []).some(function(x){ return x.id === id; });
+           return '<button data-b="' + id + '"' +
+                  (isBonus() && state.bonusId === id ? ' class="sel"' : '') + '>' +
+                  esc(b.label) + (did ? ' <span class="pmark">✓</span>' : '') + '</button>';
+         }).join("") + '</div>';
+
+    p.innerHTML = h;
     p.querySelectorAll("button").forEach(function(b){
       b.onclick = function(){
-        state.day = b.dataset.d;
+        if (b.dataset.core) { state.mode = "core"; state.bonusId = null; }
+        else { state.mode = "bonus"; state.bonusId = b.dataset.b; }
         buildPicker();
-        fetchLast(state.day).then(render);
+        render();
+        fetchLast().then(render);
       };
     });
   }
@@ -502,14 +616,34 @@
   // ---------- boot ----------
   state.day = window.DAY_KEYS[new Date().getDay()];
   loadLocal();
-  // If sets were already logged today under a different day key, follow them.
-  if (state.sets.length && state.sets[0].day) state.day = state.sets[0].day;
+
+  // Follow whatever session is already in progress today, core or bonus, so a
+  // reload mid-session lands back where you were rather than on the default.
+  var lastSet = state.sets[state.sets.length - 1];
+  if (lastSet && lastSet.day && String(lastSet.day).indexOf("bonus:") === 0) {
+    state.mode = "bonus";
+    state.bonusId = String(lastSet.day).slice(6);
+  }
+
   buildPicker();
   tick();
   paintSync();
   render();
-  fetchLast(state.day).then(render);
   flush();
+
+  // The week status decides whether the core shows as outstanding and whether
+  // the weekend session is still on offer, so the picker is rebuilt once it lands.
+  fetchWeek().then(function(){
+    // On Sunday with Saturday already done, open on a bonus rather than on a
+    // session that is finished.
+    if (!isBonus() && !setsToday()) {
+      var s = window.sessionForDay(state.day);
+      if (s && s.floats && weekendDone()) { state.mode = "bonus"; state.bonusId = "b1"; }
+    }
+    buildPicker();
+    render();
+    return fetchLast();
+  }).then(render);
 })();
 </script>
 </body>
