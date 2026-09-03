@@ -5,6 +5,6 @@ compatibility_date = "2026-08-30"
 [[d1_databases]]
 binding = "DB"
 database_name = "ironlog"
-# ⚠️ REPLACE THIS. It is a dummy id so `npm run dev` works out of the box.
-# Put your real D1 database id here before deploying — see README step 2.
+# This IS the live ironlog database. The comment that used to sit here called it
+# a dummy placeholder and invited the next person to replace a correct value.
 database_id = "ff1a03ea-1f08-4c1b-8878-59f13e69fdb7"

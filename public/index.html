@@ -57,9 +57,17 @@
   .last{color:var(--muted); font-size:13px; margin-bottom:14px}
   .last b{color:var(--ink); font-weight:600}
   .chips{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; min-height:4px}
+  /* A chip is a button: tapping a logged set opens it for correction. Sized to
+     the same tap target as everything else — this gets used mid-set with one
+     hand and chalk on it. */
   .chip{background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent;
     padding:7px 11px; font-variant-numeric:tabular-nums; font-size:14px; font-weight:600}
   .chip.fresh{border-color:var(--accent); color:var(--accent)}
+  .chip:active{transform:scale(.95)}
+  .chip.editing{border-color:var(--accent); box-shadow:0 0 0 2px rgba(255,255,255,.06)}
+  dialog .acts button.danger{background:transparent; color:var(--bad,#e5484d);
+    border-color:var(--bad,#e5484d)}
   .steppers{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px}
   .stepper{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:8px}
   .stepper .lab{font-size:11px; text-transform:uppercase; letter-spacing:.08em;
@@ -157,6 +165,34 @@
   </div>
 </dialog>
 
+<dialog id="editDlg">
+  <h3>Edit set</h3>
+  <p id="edWhat" style="margin:-6px 0 14px; color:var(--muted); font-size:13px"></p>
+  <div class="steppers">
+    <div class="stepper">
+      <div class="lab">Reps</div>
+      <div class="row">
+        <button type="button" data-ed="reps|-1">&minus;</button>
+        <input id="edReps" type="number" inputmode="numeric" step="1">
+        <button type="button" data-ed="reps|1">+</button>
+      </div>
+    </div>
+    <div class="stepper">
+      <div class="lab" id="edWLab">Weight kg</div>
+      <div class="row">
+        <button type="button" data-ed="weight|-1">&minus;</button>
+        <input id="edWeight" type="number" inputmode="decimal" step="0.5">
+        <button type="button" data-ed="weight|1">+</button>
+      </div>
+    </div>
+  </div>
+  <div class="acts">
+    <button id="edCancel">Cancel</button>
+    <button id="edDelete" class="danger">Delete</button>
+    <button id="edSave" class="primary">Save</button>
+  </div>
+</dialog>
+
 <dialog id="histDlg">
   <h3>Recent sessions</h3>
   <div class="hist" id="histBody"><div class="empty">Loading…</div></div>
@@ -172,6 +208,9 @@
   "use strict";
 
   var OUTBOX = "ironlog.outbox.v1";
+  var DELBOX = "ironlog.delbox.v1";   // deletions awaiting sync, kept apart from
+                                      // OUTBOX so the existing queue format is untouched
+                                      // and anything already sitting in it still flushes
   var LOCAL   = "ironlog.local.v1";
   var STARTED = "ironlog.started.v1";
 
@@ -202,17 +241,37 @@
   // ---------- sync ----------
   function outbox(){ return read(OUTBOX, []); }
   function queue(rec){
-    var q = outbox(); q.push(rec); write(OUTBOX, q);
+    /* Replace rather than append when the id is already waiting: editing a set
+       that has not synced yet should send ONE corrected row, not the original
+       followed by a correction. */
+    var q = outbox(), found = false;
+    for (var i = 0; i < q.length; i++){
+      if (q[i].id === rec.id){ q[i] = rec; found = true; break; }
+    }
+    if (!found) q.push(rec);
+    write(OUTBOX, q);
+    paintSync(); flush();
+  }
+  function delbox(){ return read(DELBOX, []); }
+  function queueDelete(id){
+    /* Drop any pending write for this set AND queue the delete. Dropping alone
+       is not enough: a flush may already be in flight with that row in it, and
+       then nothing would ever remove it. Deleting a row that was never inserted
+       is a harmless no-op, so the redundant case costs nothing. */
+    write(OUTBOX, outbox().filter(function(s){ return s.id !== id; }));
+    var d = delbox();
+    if (d.indexOf(id) < 0) d.push(id);
+    write(DELBOX, d);
     paintSync(); flush();
   }
   var flushing = false;
   function flush(){
-    var q = outbox();
-    if (!q.length || flushing || !navigator.onLine) { paintSync(); return; }
+    var q = outbox(), dq = delbox();
+    if ((!q.length && !dq.length) || flushing || !navigator.onLine) { paintSync(); return; }
     flushing = true;
     fetch("/api/sets", {
       method:"POST", headers:{"content-type":"application/json"},
-      body: JSON.stringify({ sets: q })
+      body: JSON.stringify({ sets: q, deletes: dq })
     }).then(function(r){
       if (!r.ok) throw new Error("http "+r.status);
       return r.json();
@@ -221,6 +280,8 @@
       var now = outbox();
       var sentIds = {}; q.forEach(function(s){ sentIds[s.id] = 1; });
       write(OUTBOX, now.filter(function(s){ return !sentIds[s.id]; }));
+      var sentDel = {}; dq.forEach(function(id){ sentDel[id] = 1; });
+      write(DELBOX, delbox().filter(function(id){ return !sentDel[id]; }));
     }).catch(function(){
       /* stays queued; retried on the interval, on focus and on reconnect */
     }).then(function(){
@@ -228,7 +289,7 @@
     });
   }
   function paintSync(){
-    var el = document.getElementById("sync"), n = outbox().length;
+    var el = document.getElementById("sync"), n = outbox().length + delbox().length;
     if (!navigator.onLine){ el.className = "pill pending"; el.textContent = "offline · "+n+" held"; return; }
     if (n){ el.className = "pill pending"; el.textContent = n+" to sync"; return; }
     el.className = "pill ok"; el.textContent = "synced";
@@ -415,7 +476,9 @@
             : 'No previous record — this one sets the baseline.') +'</div>' +
         '<div class="chips">' +
           done.map(function(s,idx){
-            return '<span class="chip'+(idx===done.length-1?" fresh":"")+'">'+s.reps+' × '+fmtW(s.weight)+'</span>';
+            return '<button type="button" class="chip'+(idx===done.length-1?" fresh":"")+'" ' +
+                   'data-edit="'+esc(s.id)+'" aria-label="Edit set '+(idx+1)+'">' +
+                   s.reps+' × '+fmtW(s.weight)+'</button>';
           }).join("") +
         '</div>' +
         '<div class="steppers">' +
@@ -470,6 +533,9 @@
     document.querySelectorAll("[data-log]").forEach(function(b){
       b.onclick = function(){ logSet(parseInt(b.dataset.log,10)); };
     });
+    document.querySelectorAll("[data-edit]").forEach(function(b){
+      b.onclick = function(){ openEdit(b.dataset.edit); };
+    });
   }
 
   function wireFoot(){
@@ -499,6 +565,93 @@
     render();
     startRest(ex.rest, "Rest — " + ex.name);
   }
+
+  // ---------- editing a logged set ----------
+  /* Corrections happen mid-session: the wrong number gets tapped, or a set is
+     logged twice while the phone is on the floor. state.sets is today only, so
+     this fixes today's session — the case that actually comes up between sets.
+     Editing an earlier day would mean fetching it back from D1 first. */
+  var editingId = null;
+
+  function findSet(id){
+    for (var i = 0; i < state.sets.length; i++) if (state.sets[i].id === id) return state.sets[i];
+    return null;
+  }
+
+  /* Deleting set 2 of 3 would otherwise leave sets numbered 1 and 3, and the
+     next set logged would take index 3 as well — setsFor().length + 1. Renumber
+     in performed order and hand back only the rows that actually moved, so the
+     outbox carries corrections rather than the whole exercise every time. */
+  function renumber(exercise, day){
+    var group = state.sets.filter(function(x){ return x.exercise === exercise && x.day === day; });
+    group.sort(function(a, b){ return String(a.ts).localeCompare(String(b.ts)); });
+    var now = new Date().toISOString(), moved = [];
+    group.forEach(function(x, i){
+      if (x.set_index !== i + 1){ x.set_index = i + 1; x.edited_at = now; moved.push(x); }
+    });
+    return moved;
+  }
+
+  function openEdit(id){
+    var st = findSet(id); if (!st) return;
+    editingId = id;
+    var prog = currentSession();
+    var ex = prog && prog.exercises ? prog.exercises.filter(function(e){ return e.name === st.exercise; })[0] : null;
+    var step = ex ? (ex.step || (ex.band ? 1 : 2.5)) : 1;
+    document.getElementById("edWhat").textContent =
+      st.exercise + " · set " + st.set_index + (ex && ex.side ? " · per side" : "");
+    document.getElementById("edWLab").textContent = ex && ex.band ? "Band level" : "Weight kg";
+    var r = document.getElementById("edReps"), w = document.getElementById("edWeight");
+    r.value = st.reps; w.value = fmtW(st.weight);
+    w.dataset.step = step; w.step = step;
+    document.getElementById("editDlg").showModal();
+  }
+
+  document.querySelectorAll("[data-ed]").forEach(function(b){
+    b.onclick = function(){
+      var p = b.dataset.ed.split("|");
+      var isReps = p[0] === "reps";
+      var inp = document.getElementById(isReps ? "edReps" : "edWeight");
+      var stepv = isReps ? 1 : (parseFloat(inp.dataset.step) || 1);
+      var v = (parseFloat(inp.value) || 0) + parseFloat(p[1]) * stepv;
+      if (v < 0) v = 0;
+      inp.value = isReps ? String(Math.round(v)) : fmtW(v);
+    };
+  });
+
+  document.getElementById("edCancel").onclick = function(){
+    editingId = null; document.getElementById("editDlg").close();
+  };
+
+  document.getElementById("edSave").onclick = function(){
+    var st = findSet(editingId); if (!st){ document.getElementById("editDlg").close(); return; }
+    var reps = parseInt(document.getElementById("edReps").value, 10) || 0;
+    var weight = parseFloat(document.getElementById("edWeight").value) || 0;
+    /* Zero reps is a deletion wearing a disguise, and a set row that says it
+       happened zero times would quietly corrupt the volume maths. */
+    if (reps <= 0){ alert("A set needs at least one rep. Use Delete to remove it."); return; }
+    if (reps !== st.reps || weight !== st.weight){
+      st.reps = reps; st.weight = weight;
+      st.edited_at = new Date().toISOString();
+      saveLocal(); queue(st);
+    }
+    editingId = null;
+    document.getElementById("editDlg").close();
+    render();
+  };
+
+  document.getElementById("edDelete").onclick = function(){
+    var st = findSet(editingId); if (!st){ document.getElementById("editDlg").close(); return; }
+    if (!confirm("Delete this set — " + st.reps + " × " + fmtW(st.weight) + "?")) return;
+    var ex = st.exercise, day = st.day, id = st.id;
+    state.sets = state.sets.filter(function(x){ return x.id !== id; });
+    queueDelete(id);
+    renumber(ex, day).forEach(queue);
+    saveLocal();
+    editingId = null;
+    document.getElementById("editDlg").close();
+    render();
+  };
 
   // ---------- end session ----------
   document.getElementById("endCancel").onclick = function(){ document.getElementById("endDlg").close(); };

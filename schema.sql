@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS sets (
   set_index  INTEGER NOT NULL,
   reps       INTEGER NOT NULL,
   weight     REAL    NOT NULL,
-  ts         TEXT    NOT NULL,      -- ISO timestamp the set was logged
+  ts         TEXT    NOT NULL,      -- ISO timestamp the set was PERFORMED; an edit never moves it
+  edited_at  TEXT,                  -- set only when a logged set is corrected; the last-write-wins clock
   created_at TEXT    DEFAULT CURRENT_TIMESTAMP
 );
 
