@@ -264,10 +264,19 @@
     write(DELBOX, d);
     paintSync(); flush();
   }
-  var flushing = false;
+  var flushing = false, lastSyncFailed = false;
   function flush(){
     var q = outbox(), dq = delbox();
-    if ((!q.length && !dq.length) || flushing || !navigator.onLine) { paintSync(); return; }
+    /* 🔴 FIXED 10 Sep 2026 — navigator.onLine USED TO GATE THIS, and it lies.
+       It reports whether the browser has an interface, not whether it can reach
+       anything, and it false-negatives on VPNs, captive portals and tabs resumed
+       from background. When it was wrong the app refused to even ATTEMPT a sync,
+       sat there saying "offline", and retried nothing — which is exactly what
+       Karl hit mid-session: "It says no network, but there clearly is."
+       Now the only reasons not to try are: nothing queued, or already trying.
+       A failed attempt costs one request and leaves the queue untouched, which
+       is far cheaper than not trying at all. */
+    if ((!q.length && !dq.length) || flushing) { paintSync(); return; }
     flushing = true;
     fetch("/api/sets", {
       method:"POST", headers:{"content-type":"application/json"},
@@ -282,7 +291,9 @@
       write(OUTBOX, now.filter(function(s){ return !sentIds[s.id]; }));
       var sentDel = {}; dq.forEach(function(id){ sentDel[id] = 1; });
       write(DELBOX, delbox().filter(function(id){ return !sentDel[id]; }));
+      lastSyncFailed = false;
     }).catch(function(){
+      lastSyncFailed = true;
       /* stays queued; retried on the interval, on focus and on reconnect */
     }).then(function(){
       flushing = false; paintSync();
@@ -290,10 +301,21 @@
   }
   function paintSync(){
     var el = document.getElementById("sync"), n = outbox().length + delbox().length;
-    if (!navigator.onLine){ el.className = "pill pending"; el.textContent = "offline · "+n+" held"; return; }
+    /* Report the last real OUTCOME, not the browser's guess about connectivity.
+       navigator.onLine is kept only as a hint in the wording. */
+    if (n && lastSyncFailed){
+      el.className = "pill pending";
+      el.textContent = n + (navigator.onLine ? " to sync — retrying" : " held · looks offline");
+      el.title = "Tap to retry now";
+      return;
+    }
     if (n){ el.className = "pill pending"; el.textContent = n+" to sync"; return; }
     el.className = "pill ok"; el.textContent = "synced";
   }
+  /* A stuck queue should have a way out that is not "wait and hope". */
+  (function(){ var el=document.getElementById("sync");
+    if(el){ el.style.cursor="pointer"; el.title="Tap to retry now";
+            el.addEventListener("click", function(){ lastSyncFailed=false; paintSync(); flush(); }); } })();
   setInterval(flush, 15000);
   addEventListener("online", flush);
   addEventListener("visibilitychange", function(){ if (!document.hidden) flush(); });
@@ -691,7 +713,7 @@
       })
       .catch(function(){
         btn.disabled = false; btn.textContent = "Finish & sync";
-        alert("No network. The session is held locally and will sync when you're back online.");
+        alert("The server did not respond. Your session is saved on this device and will keep retrying — nothing is lost. Tap the sync pill to try again now.");
       });
   };
 
