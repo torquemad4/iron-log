@@ -120,6 +120,67 @@
   .hist .hd{font-weight:700; margin-bottom:3px}
   .hist .hl{color:var(--muted); font-variant-numeric:tabular-nums}
   .empty{color:var(--muted); text-align:center; padding:26px 0}
+
+  /* ---------- tabs ---------- */
+  .tabs{display:flex; gap:6px; margin-top:10px}
+  .tabs button{flex:1; min-height:38px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel); color:var(--muted); font-weight:700; font-size:14px; cursor:pointer}
+  .tabs button.sel{background:var(--panel-2); color:var(--ink); border-color:var(--accent)}
+  [hidden]{display:none !important}
+
+  /* ---------- planner ---------- */
+  .pday h2{font-size:16px; margin:0 0 10px; letter-spacing:-.01em}
+  .slots{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  @media (max-width:420px){ .slots{grid-template-columns:1fr} }
+  .slot{text-align:left; background:var(--panel-2); border:1px solid var(--line); border-radius:12px;
+    padding:10px 12px; color:var(--ink); font:inherit; cursor:pointer; min-height:72px}
+  .slot:hover,.slot:focus-visible{border-color:var(--accent)}
+  .slot.locked{border-color:#20493c}
+  .slot .st{display:flex; justify-content:space-between; gap:8px; font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:4px}
+  .slot .st .lk{color:var(--good)}
+  .slot .st .dr{color:var(--warn)}
+  .slot ul{margin:0; padding:0; list-style:none; font-size:13px; line-height:1.4}
+  .slot li{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .slot .none{color:var(--muted); font-size:13px}
+  .tag{display:inline-block; font-size:11px; font-weight:700; padding:1px 7px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); margin-left:6px; vertical-align:1px}
+  .lib .li{display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%;
+    padding:10px 0; border:0; border-bottom:1px solid var(--line); background:none; color:var(--ink);
+    font:inherit; text-align:left; cursor:pointer}
+  .lib .li:last-child{border-bottom:0}
+  .lib .li small{color:var(--muted); font-size:13px; white-space:nowrap}
+  .cardhead{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px}
+  .cardhead h2{font-size:16px; margin:0}
+  .smallbtn{min-height:36px; padding:0 12px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--ink); font-weight:700; font-size:13px; cursor:pointer}
+  .note{font-size:13px; color:var(--muted); margin:0 0 12px}
+  .note.warnish{border-left:3px solid var(--warn); padding-left:10px}
+
+  #slotDlg{max-width:560px}
+  .srows{display:flex; flex-direction:column; gap:10px}
+  .srow2{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:10px}
+  .srow2 .nm{display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:700; margin-bottom:8px}
+  .srow2 .nm .mv{display:flex; gap:4px}
+  .srow2 .nm .mv button{width:34px; height:34px; border-radius:8px; border:1px solid var(--line);
+    background:#0f1318; color:var(--ink); cursor:pointer; font-size:15px}
+  .srow2 .f3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px}
+  .srow2 .f3 label{margin:0 0 3px; font-size:10px}
+  .srow2 .f3 input{padding:8px; font-size:15px}
+  .addrow{display:flex; gap:8px; margin-top:12px}
+  .addrow select{flex:1}
+  .addrow button{flex:none; min-height:44px; padding:0 14px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--ink); font-weight:700; cursor:pointer}
+  .ro li{padding:4px 0}
+  .lockinfo{font-size:13px; color:var(--good); margin:-4px 0 12px}
+  .rm table{width:100%; border-collapse:collapse; font-size:14px; font-variant-numeric:tabular-nums}
+  .rm th{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); text-align:left;
+    padding:6px 4px; border-bottom:1px solid var(--line)}
+  .rm td{padding:8px 4px; border-bottom:1px solid var(--line); vertical-align:top}
+  .rm td .hist{color:var(--muted); font-size:12px; margin-top:2px}
+  .chk{display:flex !important; align-items:center; gap:8px; text-transform:none !important;
+    letter-spacing:0 !important; font-size:14px !important; color:var(--ink) !important}
+  .chk input{width:auto}
 </style>
 </head>
 <body>
@@ -134,10 +195,53 @@
     <span id="elapsed"></span>
     <span class="pill" id="sync">checking…</span>
   </div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="log" class="sel">Log</button>
+    <button data-tab="planner">Planner</button>
+  </nav>
 </header>
 
-<div class="picker" id="picker"></div>
-<main id="app"></main>
+<div id="logView">
+  <div class="picker" id="picker"></div>
+  <main id="app"></main>
+</div>
+
+<main id="plannerView" hidden></main>
+
+<dialog id="slotDlg">
+  <h3 id="slotTitle">—</h3>
+  <div id="slotBody"></div>
+  <div class="acts" id="slotActs"></div>
+</dialog>
+
+<dialog id="exDlg">
+  <h3>New exercise</h3>
+  <label for="exName">Name</label>
+  <input id="exName" type="text" maxlength="80" placeholder="e.g. Cable Row">
+  <label for="exKind">Type</label>
+  <select id="exKind">
+    <option value="weighted">Weighted — load in kg</option>
+    <option value="banded">Banded — load is a band level</option>
+  </select>
+  <div class="steppers" style="margin:0">
+    <div><label for="exSets">Sets</label><input id="exSets" type="number" inputmode="numeric" min="1" max="12" value="3"></div>
+    <div><label for="exReps">Reps</label><input id="exReps" type="text" value="8-12" placeholder="8-12"></div>
+    <div><label for="exWeight" id="exWLab">Suggested kg</label><input id="exWeight" type="number" inputmode="decimal" step="0.5" min="0" placeholder="optional"></div>
+    <div><label for="exRest">Rest (s)</label><input id="exRest" type="number" inputmode="numeric" min="0" value="75"></div>
+  </div>
+  <label class="chk"><input id="exSide" type="checkbox"> Logged per arm / side</label>
+  <p id="exErr" class="note warnish" hidden></p>
+  <div class="acts">
+    <button id="exCancel">Cancel</button>
+    <button id="exSave" class="primary">Add to library</button>
+  </div>
+</dialog>
+
+<dialog id="rmDlg">
+  <h3 id="rmTitle">Rep maxes</h3>
+  <div class="rm" id="rmBody"><div class="empty">Loading…</div></div>
+  <div class="acts"><button id="rmClose" class="primary">Close</button></div>
+</dialog>
 
 <div class="rest" id="rest">
   <div class="t" id="restT">0:00</div>
@@ -213,6 +317,8 @@
                                       // and anything already sitting in it still flushes
   var LOCAL   = "ironlog.local.v1";
   var STARTED = "ironlog.started.v1";
+  var PLAN    = "ironlog.plan.v1";    // last copy of the planner, so the gym
+  var LIB     = "ironlog.lib.v1";     // still gets Sophie's sessions offline
 
   var state = {
     day: null,          // weekday key of the CORE session in view
@@ -222,6 +328,8 @@
     date: todayISO(),
     sets: [],           // sets logged today (local truth)
     last: {},           // exercise -> previous session summary
+    plan: read(PLAN, []),   // fourteen slots from /api/plan
+    lib: read(LIB, []),     // the exercise library from /api/exercises
     restTimer: null,
     restLeft: 0
   };
@@ -399,9 +507,46 @@
   }
 
   // ---------- which session is in view ----------
+  /* ⭐ A LOCKED planner slot wins over programme.js. A day Sophie has not
+     planned — or has planned but not locked — keeps the programme it had, so
+     the planner can be filled in gradually without breaking the log. */
+  function libEntry(name){
+    var n = String(name).toLowerCase();
+    for (var i = 0; i < state.lib.length; i++) if (state.lib[i].name.toLowerCase() === n) return state.lib[i];
+    return null;
+  }
+  function planSlot(day, slot){
+    for (var i = 0; i < state.plan.length; i++){
+      var p = state.plan[i];
+      if (p.day === day && p.slot === slot) return p;
+    }
+    return null;
+  }
+  function plannedSession(day, slot){
+    var p = planSlot(day, slot);
+    if (!p || !p.locked || !p.exercises || !p.exercises.length) return null;
+    return {
+      kind: "core", planned: true,
+      label: slot === "morning" ? "Morning — planned" : "Planned",
+      exercises: p.exercises.map(function(x){
+        var l = libEntry(x.name) || {};
+        return {
+          name: x.name, sets: x.sets, reps: x.reps, suggested: x.weight,
+          rest: l.rest != null ? l.rest : 75, step: l.step || null,
+          band: l.kind === "banded", side: !!l.side
+        };
+      })
+    };
+  }
+  function coreFor(day){ return plannedSession(day, "morning") || window.sessionForDay(day); }
+  function planBonusId(){ return "plan-" + state.day; }
+
   function currentSession(){
-    if (state.mode === "bonus") return window.BONUS[state.bonusId] || null;
-    return window.sessionForDay(state.day);
+    if (state.mode === "bonus"){
+      if (String(state.bonusId).indexOf("plan-") === 0) return plannedSession(String(state.bonusId).slice(5), "bonus");
+      return window.BONUS[state.bonusId] || null;
+    }
+    return coreFor(state.day);
   }
   function isBonus(){ return state.mode === "bonus"; }
 
@@ -409,7 +554,7 @@
   // days log under the same key. Otherwise a Saturday session and a Sunday one
   // would look like two different sessions in the history.
   function coreDayKey(){
-    var s = window.sessionForDay(state.day);
+    var s = coreFor(state.day);
     return (s && s.floats) ? "weekend" : state.day;
   }
   // What actually goes in the `day` column. Bonus sets are namespaced so core
@@ -423,7 +568,7 @@
   }
   // Tue and Fri prescribe nothing, so nothing is outstanding on them.
   function coreIsPrescribed(){
-    var s = window.sessionForDay(state.day);
+    var s = coreFor(state.day);
     return !!(s && s.kind === "core");
   }
 
@@ -490,9 +635,13 @@
       '<div class="card'+(complete?" done":"")+'">' +
         '<div class="exhead">' +
           '<p class="exname">'+esc(ex.name)+'</p>' +
-          '<a class="formlink" href="'+formLink(ex.name)+'" target="_blank" rel="noopener noreferrer">Form &#8599;</a>' +
+          '<span style="display:flex;gap:6px">' +
+            '<button type="button" class="formlink" style="background:none;cursor:pointer" data-rm="'+esc(ex.name)+'">Maxes</button>' +
+            '<a class="formlink" href="'+formLink(ex.name)+'" target="_blank" rel="noopener noreferrer">Form &#8599;</a>' +
+          '</span>' +
         '</div>' +
-        '<div class="target">'+ex.sets+' × '+ex.reps+' reps'+(ex.side?" per side":"")+' · '+ex.rest+'s rest</div>' +
+        '<div class="target">'+ex.sets+' × '+esc(ex.reps)+' reps'+(ex.side?" per side":"")+' · '+ex.rest+'s rest' +
+          (ex.suggested != null ? ' · suggested <b>'+fmtW(ex.suggested)+(ex.band?' (band)':' kg')+'</b>' : '') + '</div>' +
         '<div class="last">'+ (last
             ? 'Last time: <b>'+esc(last.summary)+'</b>'+(last.date? ' · '+esc(last.date):'')
             : 'No previous record — this one sets the baseline.') +'</div>' +
@@ -520,9 +669,11 @@
 
   function suggest(ex, last, done){
     if (done.length) return { reps: done[done.length-1].reps, weight: done[done.length-1].weight };
+    /* Last time beats the suggestion: the suggestion is where the lift starts,
+       the log is where it has got to. It still shows on the card either way. */
     if (last && last.topReps != null) return { reps: last.topReps, weight: last.topWeight };
     var lo = parseInt(String(ex.reps).split("-")[0], 10) || 10;
-    return { reps: lo, weight: 0 };
+    return { reps: lo, weight: ex.suggested != null ? ex.suggested : 0 };
   }
 
   function stepperHTML(i, field, label, val, step){
@@ -557,6 +708,9 @@
     });
     document.querySelectorAll("[data-edit]").forEach(function(b){
       b.onclick = function(){ openEdit(b.dataset.edit); };
+    });
+    document.querySelectorAll("#app [data-rm]").forEach(function(b){
+      b.onclick = function(){ window.IronPlanner.showMaxes(b.dataset.rm); };
     });
   }
 
@@ -751,7 +905,7 @@
   // Two choices, not seven days: today's core session, or a bonus.
   function buildPicker(){
     var p = document.getElementById("picker");
-    var core = window.sessionForDay(state.day);
+    var core = coreFor(state.day);
     var coreOn = !isBonus();
     var h = "";
 
@@ -767,9 +921,14 @@
            '" data-core="1">PT with Sophie<span class="pmark"> · not logged here</span></button></div>';
     }
 
+    /* A planned bonus for today replaces the five generic ones: the point of
+       Sophie planning it is that there is one answer, not a menu. */
+    var bonusChoices = {};
+    if (plannedSession(state.day, "bonus")) bonusChoices[planBonusId()] = { label: "Planned bonus" };
+    else bonusChoices = window.BONUS;
     h += '<div class="prow bonusrow"><span class="plabel">Bonus</span>' +
-         Object.keys(window.BONUS).map(function(id){
-           var b = window.BONUS[id];
+         Object.keys(bonusChoices).map(function(id){
+           var b = bonusChoices[id];
            var did = (state.week && state.week.bonus || []).some(function(x){ return x.id === id; });
            return '<button data-b="' + id + '"' +
                   (isBonus() && state.bonusId === id ? ' class="sel"' : '') + '>' +
@@ -812,14 +971,42 @@
     // On Sunday with Saturday already done, open on a bonus rather than on a
     // session that is finished.
     if (!isBonus() && !setsToday()) {
-      var s = window.sessionForDay(state.day);
-      if (s && s.floats && weekendDone()) { state.mode = "bonus"; state.bonusId = "b1"; }
+      var s = coreFor(state.day);
+      if (s && s.floats && weekendDone()) {
+        state.mode = "bonus";
+        state.bonusId = plannedSession(state.day, "bonus") ? planBonusId() : "b1";
+      }
     }
     buildPicker();
     render();
     return fetchLast();
   }).then(render);
+
+  // The plan is cached so the gym works offline; refresh it quietly and
+  // re-render only if something actually changed.
+  function refreshPlan(){
+    return Promise.all([
+      fetch("/api/plan").then(function(r){ return r.ok ? r.json() : null; }),
+      fetch("/api/exercises").then(function(r){ return r.ok ? r.json() : null; })
+    ]).then(function(res){
+      var before = JSON.stringify([state.plan, state.lib]);
+      if (res[0] && res[0].slots) { state.plan = res[0].slots; write(PLAN, state.plan); }
+      if (res[1] && res[1].exercises) { state.lib = res[1].exercises; write(LIB, state.lib); }
+      if (JSON.stringify([state.plan, state.lib]) !== before) {
+        buildPicker(); render(); fetchLast().then(render);
+      }
+      return res;
+    }).catch(function(){ return null; });
+  }
+  refreshPlan();
+
+  window.IronLog = {
+    state: state, refreshPlan: refreshPlan, esc: esc, fmtW: fmtW,
+    setPlan: function(slots){ state.plan = slots; write(PLAN, slots); buildPicker(); render(); },
+    setLib: function(lib){ state.lib = lib; write(LIB, lib); render(); }
+  };
 })();
 </script>
+<script src="planner.js"></script>
 </body>
 </html>

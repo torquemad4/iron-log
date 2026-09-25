@@ -29,3 +29,70 @@ CREATE TABLE IF NOT EXISTS sessions (
   notes          TEXT,
   PRIMARY KEY (date, day)
 );
+
+-- ------------------------------------------------------------------ PLANNER
+-- The exercise library. Seeded below from what programme.js already prescribes;
+-- Sophie adds to it from the Planner tab. `weight` is the suggested load — kg,
+-- or a nominal band level when kind = 'banded'.
+CREATE TABLE IF NOT EXISTS exercises (
+  name       TEXT PRIMARY KEY COLLATE NOCASE,
+  kind       TEXT    NOT NULL DEFAULT 'weighted',   -- weighted|banded
+  sets       INTEGER NOT NULL DEFAULT 3,
+  reps       TEXT    NOT NULL DEFAULT '8-12',       -- "8-12", "15", "AMRAP"
+  weight     REAL,                                  -- suggested load, may be null
+  rest       INTEGER NOT NULL DEFAULT 75,
+  step       REAL,                                  -- +/- increment; null = default
+  side       INTEGER NOT NULL DEFAULT 0,            -- 1 = logged per arm/side
+  added_by   TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- A weekly template: every day has a morning slot and a bonus slot. A slot only
+-- reaches the Log tab once it is LOCKED — an unlocked slot is Sophie's draft.
+-- `exercises` is a JSON array of {name, sets, reps, weight}, copied from the
+-- library when added so a slot can prescribe differently from the default.
+CREATE TABLE IF NOT EXISTS plan_slots (
+  day        TEXT NOT NULL,                         -- mon|tue|wed|thu|fri|sat|sun
+  slot       TEXT NOT NULL,                         -- morning|bonus
+  exercises  TEXT NOT NULL DEFAULT '[]',
+  locked     INTEGER NOT NULL DEFAULT 0,
+  locked_at  TEXT,
+  locked_by  TEXT,
+  updated_at TEXT,
+  updated_by TEXT,
+  PRIMARY KEY (day, slot)
+);
+
+-- Historical rep maxes: the heaviest load moved for a given number of reps, on
+-- a date. Imported from Trainerize; Iron Log's own sets are folded in at read
+-- time by /api/rep-maxes rather than copied here, so there is one truth for each.
+-- The id is derived from the row's content, so re-importing the same export
+-- writes nothing the second time.
+CREATE TABLE IF NOT EXISTS rep_maxes (
+  id         TEXT PRIMARY KEY,
+  exercise   TEXT    NOT NULL COLLATE NOCASE,
+  reps       INTEGER NOT NULL,
+  weight     REAL    NOT NULL,
+  date       TEXT    NOT NULL,                      -- YYYY-MM-DD
+  source     TEXT    NOT NULL DEFAULT 'trainerize',
+  note       TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rep_maxes_ex ON rep_maxes(exercise, reps, weight);
+
+-- Seed the library from programme.js. INSERT OR IGNORE, so this runs on every
+-- deploy without touching anything Sophie has since changed.
+INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side) VALUES
+  ('Single-Arm DB Row',            'weighted', 3, '8-12',  90, 2,   1),
+  ('Leaning DB Lateral Raise',     'weighted', 3, '12-15', 60, 1,   0),
+  ('Band Face Pull',               'banded',   4, '15-20', 60, 1,   0),
+  ('Banded Lat Pulldown',          'banded',   3, '10-15', 75, 1,   0),
+  ('DB Lateral Raise',             'weighted', 3, '12-15', 60, 1,   0),
+  ('DB Curl',                      'weighted', 3, '8-12',  75, 1,   0),
+  ('Incline DB Flye',              'weighted', 3, '10-15', 75, 1,   0),
+  ('Rear Delt Flye',               'weighted', 3, '15-20', 60, 1,   0),
+  ('Hammer Curl',                  'weighted', 3, '10-12', 60, 1,   0),
+  ('Skull Crusher',                'weighted', 3, '10-12', 75, 2.5, 0),
+  ('Banded Straight-Arm Pulldown', 'banded',   3, '10-15', 60, 1,   0),
+  ('Incline DB Press',             'weighted', 3, '8-12',  75, 2,   0);
