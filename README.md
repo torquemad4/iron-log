@@ -17,7 +17,32 @@ machine. History now lives server-side in D1 and is readable from any device.
   the queue drains when you're back. The header pill tells you which state you're in.
 - "End session" closes the session in D1 and confirms what was stored.
 
-The programme lives in `public/programme.js` — one place, edit it there.
+- **Planner tab.** Every day has a morning slot and a bonus slot. Tap one, pick
+  exercises from the library (or add a new one — banded or weighted, sets, reps,
+  suggested load), then **lock** it. A locked slot is what the Log shows that day;
+  locking is enforced by the server, so nothing edits it without an unlock first.
+  Bookmarkable at `/#planner`.
+- **Rep maxes.** Every exercise has a history of the heaviest load for each rep
+  count — Trainerize's history (imported) merged with everything logged here.
+  "Maxes" on any card in the Log, or tap an exercise in the Planner's library.
+
+**Where the programme lives.** A locked planner slot (D1, `plan_slots`) wins. Any
+day or slot with nothing locked falls back to `public/programme.js`, which is also
+the seed for the exercise library. So the planner can be filled in a day at a time
+without the Log ever going blank.
+
+### Importing rep maxes from Trainerize
+
+```bash
+node scripts/import-rep-maxes.mjs export.csv > rep-maxes.sql   # prints SQL, writes nothing
+npx wrangler d1 execute ironlog --remote --file=rep-maxes.sql
+```
+
+⚠️ Written before the first Trainerize export existed. It reads columns by name and
+stops with the headers it found if the file does not fit — extend `ALIASES` then.
+It also lists exercise names that are not in the library; map them in `RENAME`
+first, or "Dumbbell Row" and "Single-Arm DB Row" become two lifts with two
+histories. Re-running an import is harmless: row ids come from the content.
 
 ---
 
