@@ -26,10 +26,40 @@ machine. History now lives server-side in D1 and is readable from any device.
   count — Trainerize's history (imported) merged with everything logged here.
   "Maxes" on any card in the Log, or tap an exercise in the Planner's library.
 
+- **Filters.** Every library exercise has a muscle group and an equipment type;
+  the library and the slot picker filter on both.
+- **Away days.** The Planner shows the next three weeks with Karl's away days
+  hatched, read live from his Google **Travel** calendar. Dates only — no trip
+  names, places or flight details reach the page.
+
 **Where the programme lives.** A locked planner slot (D1, `plan_slots`) wins. Any
 day or slot with nothing locked falls back to `public/programme.js`, which is also
 the seed for the exercise library. So the planner can be filled in a day at a time
 without the Log ever going blank.
+
+### The Travel calendar feed
+
+`/api/away` reads the private iCal address of the Google **Travel** calendar from
+the Pages secret `TRAVEL_ICS_URL`, and caches it for 15 minutes. To set or change it:
+
+1. Google Calendar on the web → ⚙ Settings → *Travel* (under "Settings for my
+   calendars") → **Integrate calendar** → copy **Secret address in iCal format**.
+2. `npx wrangler pages secret put TRAVEL_ICS_URL --project-name gym-torquemada`
+   and paste it at the prompt (never on the command line).
+3. Redeploy — a Pages secret only reaches deployments made after it is set.
+
+That address lets anyone holding it read the Travel calendar, so it lives only in
+the Cloudflare secret. If it ever leaks, **Reset** it on the same Google settings
+page and repeat step 2. Until it is set the Planner says the calendar is not connected.
+
+### Database migrations
+
+`schema.sql` runs on every deploy and only ever creates what is missing, so a new
+column on an existing table cannot go there. Those live in `migrations/`, each run
+**once** against live D1 and dated. Applied so far:
+
+- `2026-09-27-exercise-tags.sql` — muscle group and equipment on `exercises`
+  (applied 27 Sep 2026).
 
 ### Importing rep maxes from Trainerize
 
