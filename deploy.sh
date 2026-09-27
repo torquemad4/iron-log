@@ -47,8 +47,13 @@ ok "app: $APP_NAME  ->  $APP_HOST  (project $PROJECT)"
 # Anything remembered from a previous run (account id, token, allowed emails).
 # Sourced before login so a stored token can stand in for the browser flow.
 ENVFILE=.cf-access.env
+# ⚠️ An ACCESS_EMAILS given in app.conf or the environment WINS over the stored
+# one. The stored file is sourced after app.conf, so without this a person added
+# to app.conf was silently dropped on any machine that had deployed before.
+_ACCESS_EMAILS_GIVEN=${ACCESS_EMAILS:-}
 # shellcheck source=/dev/null
 [ -f "$ENVFILE" ] && . "$ENVFILE"
+[ -n "$_ACCESS_EMAILS_GIVEN" ] && ACCESS_EMAILS=$_ACCESS_EMAILS_GIVEN
 
 # ---------------------------------------------------------------- 1. login
 #   CLOUDFLARE_API_TOKEN  — wrangler reads this natively; no browser, runs

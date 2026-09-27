@@ -33,6 +33,19 @@ without the Log ever going blank.
 
 ### Importing rep maxes from Trainerize
 
+⚠️ **Trainerize has no export for workout history.** Its only CSV export is the
+client contact list; workout history, stats and personal bests cannot be exported
+([Trainerize help](https://help.trainerize.com/hc/en-us/articles/31089834946324-What-Information-Can-Be-Exported-from-ABC-Trainerize)).
+So the numbers come in one of two ways, both handed to a Claude session to load:
+
+1. **Screenshots** of each exercise's history in the Trainerize app (the exercise
+   progress graph / past sets, and My Achievements for personal bests). Claude reads
+   them into the template's columns.
+2. **The template**, `public/rep-maxes-template.csv` (also downloadable from the
+   Planner banner): one row per exercise × rep count × date.
+
+Either way it ends up as a CSV in the template's shape, then:
+
 ```bash
 node scripts/import-rep-maxes.mjs export.csv > rep-maxes.sql   # prints SQL, writes nothing
 npx wrangler d1 execute ironlog --remote --file=rep-maxes.sql
@@ -158,9 +171,10 @@ Account Resources: include the account. Zone Resources: include `torquemada.uk`.
 git clone git@github.com:torquemad4/iron-log.git && cd iron-log
 export CLOUDFLARE_API_TOKEN=...            # the deploy-only token
 export CLOUDFLARE_ACCOUNT_ID=...           # the account holding torquemada.uk
-export ACCESS_EMAILS=mfsecades@gmail.com,csainzmartinez@pm.me,csainzmartinez@gmail.com
 bash deploy.sh
 ```
+
+Who is let in comes from `ACCESS_EMAILS` in `app.conf` — edit it there and redeploy.
 
 That runs start to finish unattended. The one credential covers all of it: wrangler
 uses it to deploy, and `access.mjs` and `domain.mjs` reuse it for the Access

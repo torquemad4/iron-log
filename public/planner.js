@@ -86,9 +86,12 @@
     var h = "";
 
     if (maxesInfo && !maxesInfo.rows) {
+      // Trainerize has no export for workout history (its CSV export is contact
+      // details only), so the route in is screenshots or the template, via Karl.
       h += '<div class="card outstanding"><b>No Trainerize rep maxes imported yet.</b> ' +
-           'Export them from Trainerize and send the file to Karl; the maxes below will fill in ' +
-           'once it is loaded. Anything logged here already counts.</div>';
+           'Trainerize cannot export them, so: screenshot each lift&rsquo;s history in Trainerize ' +
+           '(or fill in <a href="rep-maxes-template.csv" download style="color:var(--accent)">this template</a>) ' +
+           'and send it to Karl. Anything logged here already counts.</div>';
     }
 
     h += '<p class="note">Tap a slot to set its exercises, then lock it. Only locked slots appear in the Log. ' +
