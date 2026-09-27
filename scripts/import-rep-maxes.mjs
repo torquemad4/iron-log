@@ -35,12 +35,30 @@ const ALIASES = {
   date:     ["date", "workout date", "completed", "completed date", "day", "performed"]
 };
 
-// Trainerize name -> library name. Fill in as mismatches are reported.
+// Trainerize name -> Iron Log name. Only where they are demonstrably the same
+// lift, judged against the loads logged in Iron Log (Sep 2026). A wrong merge
+// splices two histories together; a missed one just leaves two entries, which
+// an UPDATE on rep_maxes can join later. So when in doubt, it stays separate:
+// "DB Skull Crusher" (6.5–14 kg) is NOT Iron Log's Skull Crusher (20 kg, which
+// matches the barbell one), and the chest-supported / standing rear-delt
+// variants and the FLAT chest fly are kept apart from the library lifts.
 const RENAME = {
+  "Dumbbell Single Arm Row":      "Single-Arm DB Row",
+  "Dumbbell Lateral Raise":       "DB Lateral Raise",
+  "Barbell Skullcrusher":         "Skull Crusher",
+  "Rear Deltoid Fly":             "Rear Delt Flye",
+  "Dumbbell Bicep Curl":          "DB Curl",
+  "Dumbbell Incline Bench Press": "Incline DB Press",
+  "Dumbbell Bench Press":         "Flat DB Bench Press",
 };
 
-const file = process.argv[2];
-if (!file) { console.error("usage: node scripts/import-rep-maxes.mjs <export.csv>"); process.exit(1); }
+// --library also adds every lift that has a rep max but is not yet in the
+// exercise library, so the Planner can show its history and Sophie can pick it.
+// They go in with plain defaults (weighted, 3 × 8-12, 75 s) and are marked
+// added_by = 'trainerize-import'; the numbers that matter are set per slot.
+const withLibrary = process.argv.includes("--library");
+const file = process.argv.slice(2).find(a => !a.startsWith("--"));
+if (!file) { console.error("usage: node scripts/import-rep-maxes.mjs [--library] <export.csv>"); process.exit(1); }
 
 const rows = parseCSV(readFileSync(file, "utf8").replace(/^﻿/, ""));
 if (rows.length < 2) die("no data rows found");
@@ -84,11 +102,17 @@ for (const { exercise, reps, weight, date } of best.values()) {
   out.push(`INSERT OR IGNORE INTO rep_maxes (id, exercise, reps, weight, date, source) VALUES (${q(id)}, ${q(exercise)}, ${reps}, ${weight}, ${q(date)}, 'trainerize');`);
 }
 
+const repRows = out.length;
+if (withLibrary) {
+  for (const n of unknown.keys()) {
+    out.push(`INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, side, added_by) VALUES (${q(n)}, 'weighted', 3, '8-12', 75, ${/single.arm/i.test(n) ? 1 : 0}, 'trainerize-import');`);
+  }
+}
 console.log(out.join("\n"));
-console.error(`${out.length} rep-max rows ready (from ${rows.length - 1} lines), ${noLoad} skipped with no load, ${bad.length} skipped as unreadable.`);
+console.error(`${repRows} rep-max rows ready (from ${rows.length - 1} lines), ${noLoad} skipped with no load, ${bad.length} skipped as unreadable.`);
 if (bad.length) console.error("first skipped:", bad.slice(0, 3).map(r => r.join(" | ")).join("\n  "));
 if (unknown.size) {
-  console.error(`\n${unknown.size} exercise name(s) not in the library — they will import as NEW lifts unless mapped in RENAME:`);
+  console.error(`\n${unknown.size} exercise name(s) not in the library — they import as their own lifts unless mapped in RENAME${withLibrary ? " (and are added to the library)" : ""}:`);
   for (const [n, c] of unknown) console.error(`  ${n}  (${c} rows)`);
 }
 
