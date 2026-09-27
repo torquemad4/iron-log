@@ -181,6 +181,24 @@
   .chk{display:flex !important; align-items:center; gap:8px; text-transform:none !important;
     letter-spacing:0 !important; font-size:14px !important; color:var(--ink) !important}
   .chk input{width:auto}
+
+  /* ---------- planner filters ---------- */
+  .fchips{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0 0 8px}
+  .fchip{min-height:32px; padding:0 11px; border-radius:999px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--muted); font-weight:700; font-size:13px; cursor:pointer}
+  .fchip.sel{background:var(--accent); color:var(--accent-ink); border-color:transparent}
+  .lib .li span .tag:first-of-type{margin-left:8px}
+
+  /* ---------- away days ---------- */
+  .cal{display:grid; grid-template-columns:repeat(7,1fr); gap:4px}
+  .calh{font-size:11px; font-weight:700; color:var(--muted); text-align:center; padding-bottom:2px}
+  .calc{min-height:48px; border-radius:8px; border:1px solid var(--line); background:var(--panel-2);
+    padding:4px 5px; font-size:12px; font-variant-numeric:tabular-nums; display:flex; flex-direction:column; gap:2px}
+  .calc.past{opacity:.4}
+  .calc.today{border-color:var(--accent)}
+  .calc.away{background:repeating-linear-gradient(135deg,#3a1f24 0 6px,#2a171b 6px 12px); border-color:#7a3340}
+  .calc.away b{color:#ff8a9a; font-size:11px}
+  .awaytag{font-size:12px; font-weight:700; color:#ff8a9a; margin-left:10px; vertical-align:2px}
 </style>
 </head>
 <body>
@@ -218,11 +236,10 @@
   <h3>New exercise</h3>
   <label for="exName">Name</label>
   <input id="exName" type="text" maxlength="80" placeholder="e.g. Cable Row">
-  <label for="exKind">Type</label>
-  <select id="exKind">
-    <option value="weighted">Weighted — load in kg</option>
-    <option value="banded">Banded — load is a band level</option>
-  </select>
+  <div class="steppers" style="margin:0">
+    <div><label for="exMuscle">Muscle group</label><select id="exMuscle"></select></div>
+    <div><label for="exEquip">Type</label><select id="exEquip"></select></div>
+  </div>
   <div class="steppers" style="margin:0">
     <div><label for="exSets">Sets</label><input id="exSets" type="number" inputmode="numeric" min="1" max="12" value="3"></div>
     <div><label for="exReps">Reps</label><input id="exReps" type="text" value="8-12" placeholder="8-12"></div>
@@ -992,6 +1009,7 @@
       var before = JSON.stringify([state.plan, state.lib]);
       if (res[0] && res[0].slots) { state.plan = res[0].slots; write(PLAN, state.plan); }
       if (res[1] && res[1].exercises) { state.lib = res[1].exercises; write(LIB, state.lib); }
+      if (res[1] && res[1].muscles) state.vocab = { muscles: res[1].muscles, equipment: res[1].equipment };
       if (JSON.stringify([state.plan, state.lib]) !== before) {
         buildPicker(); render(); fetchLast().then(render);
       }

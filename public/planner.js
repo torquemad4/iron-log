@@ -16,6 +16,11 @@
   var L = window.IronLog;
   var esc = L.esc, fmtW = L.fmtW;
   var maxesInfo = null;       // { rows, last } from /api/rep-maxes
+  var away = null;            // /api/away: { connected, days: [iso…], error? }
+  var FILTER_KEY = "ironlog.planfilter.v1";
+  var filter = (function(){ try { return JSON.parse(localStorage.getItem(FILTER_KEY)) || {}; } catch (e) { return {}; } })();
+  var EQUIP_LABEL = { barbell: "Barbell", dumbbell: "Dumbbell", band: "Band", bodyweight: "Bodyweight",
+                      kettlebell: "Kettlebell", other: "Machine / other" };
   var editing = null;         // { day, slot, exercises: [...], locked, ... } — a working copy
 
   // ---------- tabs ----------
@@ -35,6 +40,8 @@
 
   function load(){
     L.refreshPlan().then(renderPlanner);
+    fetch("/api/away").then(function(r){ return r.json(); }).then(function(j){ away = j; renderPlanner(); })
+      .catch(function(){ away = { connected: true, error: "offline", days: [] }; renderPlanner(); });
     fetch("/api/rep-maxes").then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
       if (j && j.imported) { maxesInfo = j.imported; renderPlanner(); }
     }).catch(function(){});
@@ -79,6 +86,77 @@
   }
   function person(email){ return email && email !== "local" ? String(email).split("@")[0] : ""; }
 
+  // ---------- filters ----------
+  /* Muscle group and equipment. One filter, shared by the library list and the
+     "add from library" picker, remembered on this device. The choices come from
+     the server so the page and the data cannot drift apart; before the first
+     load they fall back to whatever the library itself contains. */
+  function vocab(kind){
+    var v = L.state.vocab && L.state.vocab[kind];
+    if (v && v.length) return v;
+    var seen = {};
+    L.state.lib.forEach(function(x){ var t = kind === "muscles" ? x.muscle : x.equipment; if (t) seen[t] = 1; });
+    return Object.keys(seen).sort();
+  }
+  function matches(x){
+    return (!filter.muscle || x.muscle === filter.muscle) && (!filter.equip || x.equipment === filter.equip);
+  }
+  function setFilter(k, v){
+    filter[k] = v || "";
+    try { localStorage.setItem(FILTER_KEY, JSON.stringify(filter)); } catch (e) {}
+  }
+  function chipRow(label, key, values, labelOf){
+    return '<div class="fchips"><span class="plabel">' + label + '</span>' +
+      ['<button class="fchip' + (!filter[key] ? ' sel' : '') + '" data-f="' + key + '|">All</button>']
+        .concat(values.map(function(v){
+          return '<button class="fchip' + (filter[key] === v ? ' sel' : '') + '" data-f="' + key + '|' + esc(v) + '">' + esc(labelOf(v)) + '</button>';
+        })).join("") + '</div>';
+  }
+  function tags(x){
+    return (x.muscle ? '<span class="tag">' + esc(x.muscle) + '</span>' : '') +
+           '<span class="tag">' + esc(EQUIP_LABEL[x.equipment] || (x.kind === "banded" ? "Band" : "Untagged")) + '</span>';
+  }
+
+  // ---------- away days ----------
+  function isoDate(d){
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function awaySet(){ var o = {}; ((away && away.days) || []).forEach(function(d){ o[d] = 1; }); return o; }
+  // Three weeks, Monday first, starting with the current week.
+  function upcoming(){
+    var t = new Date(); t.setHours(12, 0, 0, 0);
+    var mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+    var out = [];
+    for (var i = 0; i < 21; i++) { var d = new Date(mon); d.setDate(mon.getDate() + i); out.push(d); }
+    return { days: out, today: isoDate(t) };
+  }
+  function awayStrip(){
+    if (!away) return '<div class="card"><p class="note" style="margin:0">Checking Karl&rsquo;s travel calendar…</p></div>';
+    if (!away.connected) {
+      return '<div class="card outstanding"><b>Travel calendar not connected yet.</b> Away days will show here once it is.</div>';
+    }
+    var a = awaySet(), u = upcoming();
+    var h = '<div class="card"><div class="cardhead"><h2>Next three weeks</h2>' +
+            '<span class="note" style="margin:0">' + (away.error ? 'calendar unreachable' : 'from Karl&rsquo;s travel calendar') + '</span></div>' +
+            '<div class="cal">' + ["M","T","W","T","F","S","S"].map(function(x){ return '<div class="calh">' + x + '</div>'; }).join("");
+    u.days.forEach(function(d){
+      var iso = isoDate(d), past = iso < u.today, off = a[iso];
+      h += '<div class="calc' + (off ? ' away' : '') + (past ? ' past' : '') + (iso === u.today ? ' today' : '') + '"' +
+           (off ? ' title="Karl is away"' : '') + '>' +
+           '<span>' + d.getDate() + (d.getDate() === 1 || iso === isoDate(u.days[0]) ? ' ' + d.toLocaleDateString([], { month: "short" }) : '') + '</span>' +
+           (off ? '<b>Away</b>' : '') + '</div>';
+    });
+    h += '</div>' + (Object.keys(a).length ? '' : '<p class="note" style="margin:8px 0 0">No trips in the next eight weeks.</p>') +
+         '<p class="note" style="margin:8px 0 0">Away days are not training days — anything planned for them will be missed.</p></div>';
+    return h;
+  }
+  // The away dates, within the three-week window, that fall on this weekday.
+  function awayOn(dayKey){
+    var a = awaySet(), idx = DAYS.map(function(d){ return d[0]; }).indexOf(dayKey), u = upcoming();
+    return u.days.filter(function(d, i){ return i % 7 === idx && isoDate(d) >= u.today && a[isoDate(d)]; })
+                 .map(function(d){ return d.toLocaleDateString([], { day: "numeric", month: "short" }); });
+  }
+
   // ---------- the week ----------
   function renderPlanner(){
     var v = document.getElementById("plannerView");
@@ -93,23 +171,26 @@
            'Anything logged in Iron Log already counts.</div>';
     }
 
+    h += awayStrip();
+
     h += '<p class="note">Tap a slot to set its exercises, then lock it. Only locked slots appear in the Log. ' +
-         'A day with nothing locked keeps the current programme.</p>';
+         'A day with nothing locked keeps the current programme. The plan repeats every week.</p>';
 
     DAYS.forEach(function(d){
-      h += '<div class="card pday"><h2>' + d[1] + '</h2><div class="slots">' +
+      var off = awayOn(d[0]);
+      h += '<div class="card pday"><h2>' + d[1] +
+           (off.length ? '<span class="awaytag">✈ Away ' + esc(off.join(", ")) + '</span>' : '') +
+           '</h2><div class="slots">' +
            ["morning","bonus"].map(function(sl){ return slotTile(slotOf(d[0], sl)); }).join("") +
            '</div></div>';
     });
 
     h += '<div class="card lib"><div class="cardhead"><h2>Exercise library</h2>' +
          '<button class="smallbtn" id="libAdd">+ New exercise</button></div>' +
+         chipRow("Muscle", "muscle", vocab("muscles"), function(v){ return v; }) +
+         chipRow("Type", "equip", vocab("equipment"), function(v){ return EQUIP_LABEL[v] || v; }) +
          '<p class="note">Tap one for its rep-max history.</p>' +
-         (L.state.lib.length ? L.state.lib.map(function(x){
-           return '<button class="li" data-rm="' + esc(x.name) + '"><span>' + esc(x.name) +
-                  '<span class="tag">' + (x.kind === "banded" ? "band" : "weight") + '</span></span>' +
-                  '<small>' + x.sets + '×' + esc(x.reps) + (x.weight != null ? ' @ ' + fmtW(x.weight) + (x.kind === "banded" ? " band" : " kg") : '') + '</small></button>';
-         }).join("") : '<div class="empty">Loading the library…</div>') +
+         libList() +
          '</div>';
 
     v.innerHTML = h;
@@ -117,7 +198,21 @@
       b.onclick = function(){ var p = b.dataset.slot.split("|"); openSlot(p[0], p[1]); };
     });
     v.querySelectorAll("[data-rm]").forEach(function(b){ b.onclick = function(){ showMaxes(b.dataset.rm); }; });
+    v.querySelectorAll("[data-f]").forEach(function(b){
+      b.onclick = function(){ var p = b.dataset.f.split("|"); setFilter(p[0], p[1]); renderPlanner(); };
+    });
     document.getElementById("libAdd").onclick = function(){ openNewExercise(null); };
+  }
+
+  function libList(){
+    if (!L.state.lib.length) return '<div class="empty">Loading the library…</div>';
+    var shown = L.state.lib.filter(matches);
+    if (!shown.length) return '<div class="empty">Nothing matches that filter.</div>';
+    return '<div class="note" style="margin:0 0 4px">' + shown.length + ' of ' + L.state.lib.length + '</div>' +
+      shown.map(function(x){
+        return '<button class="li" data-rm="' + esc(x.name) + '"><span>' + esc(x.name) + tags(x) + '</span>' +
+               '<small>' + x.sets + '×' + esc(x.reps) + (x.weight != null ? ' @ ' + fmtW(x.weight) + (x.kind === "banded" ? " band" : " kg") : '') + '</small></button>';
+      }).join("");
   }
 
   function slotTile(s){
@@ -166,14 +261,14 @@
 
     var used = {};
     s.exercises.forEach(function(x){ used[x.name.toLowerCase()] = 1; });
-    var options = L.state.lib.filter(function(x){ return !used[x.name.toLowerCase()]; });
+    var options = L.state.lib.filter(function(x){ return !used[x.name.toLowerCase()] && matches(x); });
 
     body.innerHTML =
       '<div class="srows">' +
         (s.exercises.length ? s.exercises.map(function(x, i){
           var banded = (lib(x.name) || {}).kind === "banded";
           return '<div class="srow2">' +
-            '<div class="nm"><span>' + esc(x.name) + '<span class="tag">' + (banded ? "band" : "weight") + '</span></span>' +
+            '<div class="nm"><span>' + esc(x.name) + tags(lib(x.name) || {}) + '</span>' +
               '<span class="mv">' +
                 '<button data-mv="' + i + '|-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
                 '<button data-mv="' + i + '|1" aria-label="Move down"' + (i === s.exercises.length - 1 ? ' disabled' : '') + '>↓</button>' +
@@ -187,8 +282,16 @@
         }).join("") : '<div class="empty" style="padding:10px 0">No exercises yet. Add one below.</div>') +
       '</div>' +
       '<div class="addrow">' +
+        '<select id="slMuscle" aria-label="Filter by muscle group"><option value="">All muscles</option>' +
+          vocab("muscles").map(function(v){ return '<option' + (filter.muscle === v ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join("") +
+        '</select>' +
+        '<select id="slEquip" aria-label="Filter by type"><option value="">All types</option>' +
+          vocab("equipment").map(function(v){ return '<option value="' + esc(v) + '"' + (filter.equip === v ? ' selected' : '') + '>' + esc(EQUIP_LABEL[v] || v) + '</option>'; }).join("") +
+        '</select>' +
+      '</div>' +
+      '<div class="addrow" style="margin-top:8px">' +
         '<select id="slPick" aria-label="Exercise from the library">' +
-          '<option value="">Add from library…</option>' +
+          '<option value="">Add from library… (' + options.length + ')</option>' +
           options.map(function(x){ return '<option value="' + esc(x.name) + '">' + esc(x.name) + '</option>'; }).join("") +
         '</select>' +
         '<button id="slNew">New…</button>' +
@@ -215,6 +318,8 @@
     body.querySelectorAll("[data-rmv]").forEach(function(b){
       b.onclick = function(){ s.exercises.splice(+b.dataset.rmv, 1); paintSlot(); };
     });
+    document.getElementById("slMuscle").onchange = function(){ setFilter("muscle", this.value); paintSlot(); };
+    document.getElementById("slEquip").onchange = function(){ setFilter("equip", this.value); paintSlot(); };
     document.getElementById("slPick").onchange = function(){
       if (this.value) addToSlot(lib(this.value));
     };
@@ -254,7 +359,10 @@
   function openNewExercise(then){
     afterNew = then;
     ["exName","exWeight"].forEach(function(id){ document.getElementById(id).value = ""; });
-    document.getElementById("exKind").value = "weighted";
+    document.getElementById("exEquip").innerHTML = vocab("equipment").map(function(v){
+      return '<option value="' + esc(v) + '"' + (filter.equip === v ? ' selected' : '') + '>' + esc(EQUIP_LABEL[v] || v) + '</option>'; }).join("");
+    document.getElementById("exMuscle").innerHTML = vocab("muscles").map(function(v){
+      return '<option' + (filter.muscle === v ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join("");
     document.getElementById("exSets").value = 3;
     document.getElementById("exReps").value = "8-12";
     document.getElementById("exRest").value = 75;
@@ -266,9 +374,9 @@
   }
   function kindLabel(){
     document.getElementById("exWLab").textContent =
-      document.getElementById("exKind").value === "banded" ? "Suggested band level" : "Suggested kg";
+      document.getElementById("exEquip").value === "band" ? "Suggested band level" : "Suggested kg";
   }
-  document.getElementById("exKind").onchange = kindLabel;
+  document.getElementById("exEquip").onchange = kindLabel;
   document.getElementById("exCancel").onclick = function(){ document.getElementById("exDlg").close(); };
   document.getElementById("exSave").onclick = function(){
     var btn = this, err = document.getElementById("exErr");
@@ -278,7 +386,8 @@
     btn.disabled = true;
     api("POST", "/api/exercises", {
       name: name,
-      kind: document.getElementById("exKind").value,
+      equipment: document.getElementById("exEquip").value,
+      muscle: document.getElementById("exMuscle").value,
       sets: document.getElementById("exSets").value,
       reps: document.getElementById("exReps").value,
       weight: document.getElementById("exWeight").value,
