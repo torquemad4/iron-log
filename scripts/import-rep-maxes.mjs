@@ -1,14 +1,22 @@
 #!/usr/bin/env node
-// Turn a rep-max export (Trainerize, or anything tabular) into SQL for D1.
+// Turn a rep-max export into SQL for D1.
 //
-//   node scripts/import-rep-maxes.mjs export.csv > rep-maxes.sql
+//   node scripts/import-rep-maxes.mjs trainerize-sets.csv > rep-maxes.sql
 //   npx wrangler d1 execute ironlog --remote --file=rep-maxes.sql
 //
-// ⚠️ THE TRAINERIZE FORMAT HAS NOT BEEN SEEN YET. This was written before the
-// first export existed, so it reads columns by NAME, not position, and accepts
-// the obvious spellings of each. If the real file does not fit, it stops and
-// prints the headers it found rather than guessing — extend ALIASES below and
-// run it again. Nothing is written by this script; it only prints SQL.
+// Trainerize itself cannot export workout history. The file this is built for
+// is `trainerize export` from agentic-fitness-sync (one row per logged set:
+// date, workout, exercise, muscle, equipment, set, reps, weightKg, rpe, …),
+// and it also takes the hand-filled public/rep-maxes-template.csv.
+//
+// Columns are read by NAME, not position. If a file does not fit, it stops and
+// prints the headers it found rather than guessing — extend ALIASES and rerun.
+// Nothing is written by this script; it only prints SQL.
+//
+// Every set is reduced to ONE row per exercise × reps × date: the heaviest.
+// That is what a rep max is, and it keeps a few thousand sets from becoming a
+// few thousand rows. Sets with no load (bodyweight, bands logged as 0) are
+// skipped — a rep max of nothing says nothing.
 //
 // Weights are assumed to be kg. A column or cell that says "lb"/"lbs" is
 // converted. Output is INSERT OR IGNORE with a content-derived id, the same
@@ -23,7 +31,7 @@ import { readFileSync } from "node:fs";
 const ALIASES = {
   exercise: ["exercise", "exercise name", "name", "movement", "lift"],
   reps:     ["reps", "rep", "rep max", "rm", "repetitions", "reps completed"],
-  weight:   ["weight", "load", "weight (kg)", "weight kg", "kg", "weight (lbs)", "weight lbs", "lbs", "max", "max weight"],
+  weight:   ["weight", "load", "weight (kg)", "weight kg", "kg", "weight (lbs)", "weightkg", "weight lbs", "lbs", "max", "max weight"],
   date:     ["date", "workout date", "completed", "completed date", "day", "performed"]
 };
 
@@ -49,25 +57,35 @@ const library = new Set(
      .matchAll(/^\s*\('([^']+)',\s*'(?:weighted|banded)'/gm)].map(m => m[1].toLowerCase())
 );
 
-const out = [], bad = [], unknown = new Map();
+const best = new Map(), bad = [], unknown = new Map();
+let noLoad = 0;
 for (const r of rows.slice(1)) {
   if (!r.some(c => c.trim())) continue;
-  let exercise = (r[col.exercise] || "").trim();
+  // agentic-fitness-sync prefixes "'" to names that look like spreadsheet formulas.
+  let exercise = (r[col.exercise] || "").trim().replace(/^'(?=[=+\-@])/, "");
   exercise = RENAME[exercise] || exercise;
   const reps = parseInt(String(r[col.reps]).replace(/[^\d]/g, ""), 10);
   const rawW = String(r[col.weight] || "");
   let weight = parseFloat(rawW.replace(/[^\d.]/g, ""));
   if (headerSaysLb || /lb/i.test(rawW)) weight = weight * 0.45359237;
   const date = toISODate(r[col.date]);
-  if (!exercise || !(reps > 0) || !Number.isFinite(weight) || !date) { bad.push(r); continue; }
-  if (!library.has(exercise.toLowerCase())) unknown.set(exercise, (unknown.get(exercise) || 0) + 1);
+  if (!exercise || !(reps > 0) || !date) { bad.push(r); continue; }
+  if (!(weight > 0)) { noLoad++; continue; }
   weight = Math.round(weight * 100) / 100;
+  const key = [exercise.toLowerCase(), reps, date].join("|");
+  const cur = best.get(key);
+  if (!cur || weight > cur.weight) best.set(key, { exercise, reps, weight, date });
+}
+
+const out = [];
+for (const { exercise, reps, weight, date } of best.values()) {
+  if (!library.has(exercise.toLowerCase())) unknown.set(exercise, (unknown.get(exercise) || 0) + 1);
   const id = ["trainerize", exercise.toLowerCase(), reps, weight, date].join("|");
   out.push(`INSERT OR IGNORE INTO rep_maxes (id, exercise, reps, weight, date, source) VALUES (${q(id)}, ${q(exercise)}, ${reps}, ${weight}, ${q(date)}, 'trainerize');`);
 }
 
 console.log(out.join("\n"));
-console.error(`${out.length} rows ready, ${bad.length} skipped as unreadable.`);
+console.error(`${out.length} rep-max rows ready (from ${rows.length - 1} lines), ${noLoad} skipped with no load, ${bad.length} skipped as unreadable.`);
 if (bad.length) console.error("first skipped:", bad.slice(0, 3).map(r => r.join(" | ")).join("\n  "));
 if (unknown.size) {
   console.error(`\n${unknown.size} exercise name(s) not in the library — they will import as NEW lifts unless mapped in RENAME:`);

@@ -36,23 +36,28 @@ without the Log ever going blank.
 ⚠️ **Trainerize has no export for workout history.** Its only CSV export is the
 client contact list; workout history, stats and personal bests cannot be exported
 ([Trainerize help](https://help.trainerize.com/hc/en-us/articles/31089834946324-What-Information-Can-Be-Exported-from-ABC-Trainerize)).
-So the numbers come in one of two ways, both handed to a Claude session to load:
+So they come out through **[agentic-fitness-sync](https://github.com/versantus/agentic-fitness-sync)**
+(MIT, unofficial): it logs in as Karl, reads his own workouts read-only, and
+`trainerize export` writes one CSV row per logged set. It was read in full before
+use — the password goes only to `api.trainerize.com`. Trainerize's terms may
+restrict automated access; it was used once, deliberately, for Karl's own data.
+It is run on Karl's machine from a packaged `trainerize-export-v1.zip` (not in this
+repo) so the password never leaves it. Login is `csainzmartinez@gmail.com` on
+`sophierayfitness.trainerize.com`.
 
-1. **Screenshots** of each exercise's history in the Trainerize app (the exercise
-   progress graph / past sets, and My Achievements for personal bests). Claude reads
-   them into the template's columns.
-2. **The template**, `public/rep-maxes-template.csv` (also downloadable from the
-   Planner banner): one row per exercise × rep count × date.
+Fallback if that ever stops working: screenshots of the Trainerize app, or the
+hand-filled template `public/rep-maxes-template.csv`.
 
-Either way it ends up as a CSV in the template's shape, then:
+Then, with the CSV:
 
 ```bash
 node scripts/import-rep-maxes.mjs export.csv > rep-maxes.sql   # prints SQL, writes nothing
 npx wrangler d1 execute ironlog --remote --file=rep-maxes.sql
 ```
 
-⚠️ Written before the first Trainerize export existed. It reads columns by name and
-stops with the headers it found if the file does not fit — extend `ALIASES` then.
+It reads columns by name, keeps only the heaviest set per exercise × reps × date,
+and skips sets with no load. Tested against agentic-fitness-sync's own demo export
+(5,553 sets → 2,203 rows); not yet against Karl's real one.
 It also lists exercise names that are not in the library; map them in `RENAME`
 first, or "Dumbbell Row" and "Single-Arm DB Row" become two lifts with two
 histories. Re-running an import is harmless: row ids come from the content.
