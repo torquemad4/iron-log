@@ -51,13 +51,15 @@ hand-filled template `public/rep-maxes-template.csv`.
 Then, with the CSV:
 
 ```bash
-node scripts/import-rep-maxes.mjs export.csv > rep-maxes.sql   # prints SQL, writes nothing
+node scripts/import-rep-maxes.mjs --library export.csv > rep-maxes.sql   # prints SQL, writes nothing
 npx wrangler d1 execute ironlog --remote --file=rep-maxes.sql
 ```
 
 It reads columns by name, keeps only the heaviest set per exercise × reps × date,
 and skips sets with no load. Tested against agentic-fitness-sync's own demo export
-(5,553 sets → 2,203 rows); not yet against Karl's real one.
+(5,553 sets → 2,203 rows), then run for real on 27 Sep 2026: 3,860 Trainerize sets
+(Mar 2022 – Sep 2026) → 1,476 rep-max rows, loaded into the live D1 with
+`--library`, which also added 51 Trainerize lifts to the exercise library.
 It also lists exercise names that are not in the library; map them in `RENAME`
 first, or "Dumbbell Row" and "Single-Arm DB Row" become two lifts with two
 histories. Re-running an import is harmless: row ids come from the content.
