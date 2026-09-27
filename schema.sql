@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS exercises (
   rest       INTEGER NOT NULL DEFAULT 75,
   step       REAL,                                  -- +/- increment; null = default
   side       INTEGER NOT NULL DEFAULT 0,            -- 1 = logged per arm/side
+  muscle     TEXT,                                  -- Chest|Back|Shoulders|Biceps|Triceps|Legs|Core|Full body
+  equipment  TEXT,                                  -- barbell|dumbbell|band|bodyweight|kettlebell|other
   added_by   TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -82,17 +84,18 @@ CREATE TABLE IF NOT EXISTS rep_maxes (
 CREATE INDEX IF NOT EXISTS idx_rep_maxes_ex ON rep_maxes(exercise, reps, weight);
 
 -- Seed the library from programme.js. INSERT OR IGNORE, so this runs on every
--- deploy without touching anything Sophie has since changed.
-INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side) VALUES
-  ('Single-Arm DB Row',            'weighted', 3, '8-12',  90, 2,   1),
-  ('Leaning DB Lateral Raise',     'weighted', 3, '12-15', 60, 1,   0),
-  ('Band Face Pull',               'banded',   4, '15-20', 60, 1,   0),
-  ('Banded Lat Pulldown',          'banded',   3, '10-15', 75, 1,   0),
-  ('DB Lateral Raise',             'weighted', 3, '12-15', 60, 1,   0),
-  ('DB Curl',                      'weighted', 3, '8-12',  75, 1,   0),
-  ('Incline DB Flye',              'weighted', 3, '10-15', 75, 1,   0),
-  ('Rear Delt Flye',               'weighted', 3, '15-20', 60, 1,   0),
-  ('Hammer Curl',                  'weighted', 3, '10-12', 60, 1,   0),
-  ('Skull Crusher',                'weighted', 3, '10-12', 75, 2.5, 0),
-  ('Banded Straight-Arm Pulldown', 'banded',   3, '10-15', 60, 1,   0),
-  ('Incline DB Press',             'weighted', 3, '8-12',  75, 2,   0);
+-- deploy without touching anything Sophie has since changed. (A database made
+-- before 27 Sep 2026 needs migrations/2026-09-27-exercise-tags.sql first.)
+INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side, muscle, equipment) VALUES
+  ('Single-Arm DB Row',            'weighted', 3, '8-12',  90, 2,   1, 'Back',      'dumbbell'),
+  ('Leaning DB Lateral Raise',     'weighted', 3, '12-15', 60, 1,   0, 'Shoulders', 'dumbbell'),
+  ('Band Face Pull',               'banded',   4, '15-20', 60, 1,   0, 'Shoulders', 'band'),
+  ('Banded Lat Pulldown',          'banded',   3, '10-15', 75, 1,   0, 'Back',      'band'),
+  ('DB Lateral Raise',             'weighted', 3, '12-15', 60, 1,   0, 'Shoulders', 'dumbbell'),
+  ('DB Curl',                      'weighted', 3, '8-12',  75, 1,   0, 'Biceps',    'dumbbell'),
+  ('Incline DB Flye',              'weighted', 3, '10-15', 75, 1,   0, 'Chest',     'dumbbell'),
+  ('Rear Delt Flye',               'weighted', 3, '15-20', 60, 1,   0, 'Shoulders', 'dumbbell'),
+  ('Hammer Curl',                  'weighted', 3, '10-12', 60, 1,   0, 'Biceps',    'dumbbell'),
+  ('Skull Crusher',                'weighted', 3, '10-12', 75, 2.5, 0, 'Triceps',   'barbell'),
+  ('Banded Straight-Arm Pulldown', 'banded',   3, '10-15', 60, 1,   0, 'Back',      'band'),
+  ('Incline DB Press',             'weighted', 3, '8-12',  75, 2,   0, 'Chest',     'dumbbell');
