@@ -583,7 +583,8 @@
     var d = logDay();
     return state.sets.some(function(s){ return s.day === d; });
   }
-  // Tue and Fri prescribe nothing, so nothing is outstanding on them.
+  // A day with no session (nothing in programme.js, nothing locked in the
+  // Planner) prescribes nothing, so nothing is outstanding on it.
   function coreIsPrescribed(){
     var s = coreFor(state.day);
     return !!(s && s.kind === "core");
@@ -612,12 +613,12 @@
     document.getElementById("dayLabel").textContent =
       prog ? (isBonus() ? "Bonus — " + prog.label : prog.label) : "—";
 
-    if (!prog || prog.kind === "pt"){
+    if (!prog){
       app.innerHTML =
         '<div class="card"><div class="rest-day">' +
-          '<h2>PT day</h2>' +
-          '<p>Sophie&rsquo;s session. Trainerize has the numbers &mdash; nothing to log here. ' +
-             'A bonus session below is still yours to do if you want one.</p>' +
+          '<h2>Nothing planned today</h2>' +
+          '<p>No session is set for today. Lock one in the Planner to have it show here, ' +
+             'or pick a bonus above.</p>' +
         '</div></div>' + footHTML();
       wireFoot();
       return;
@@ -933,9 +934,6 @@
                esc(core.label) + '<span class="pmark">' + mark + '</span>' +
              '</button>' +
            '</div>';
-    } else if (core && core.kind === "pt") {
-      h += '<div class="prow"><button class="wide' + (coreOn ? ' sel' : '') +
-           '" data-core="1">PT with Sophie<span class="pmark"> · not logged here</span></button></div>';
     }
 
     /* A planned bonus for today replaces the five generic ones: the point of

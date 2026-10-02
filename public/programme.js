@@ -5,6 +5,9 @@
 // band  = resistance band, so the weight field is a nominal "level", not kg
 // side  = logged per arm/side
 
+// Tuesday and Friday have NO fixed session. They used to be fixed PT days
+// with Sophie; that was dropped on 2 Oct 2026. Whatever happens on them now is
+// whatever is locked for them in the Planner.
 window.PROGRAMME = {
 
   // ---------------------------------------------------------------- CORE
@@ -18,8 +21,6 @@ window.PROGRAMME = {
       { name: "Band Face Pull",           sets: 4, reps: "15-20", rest: 60, band: true }
     ]
   },
-
-  tue: { kind: "pt", label: "PT with Sophie", notionDay: "PT Tue" },
 
   wed: {
     kind: "core",
@@ -42,8 +43,6 @@ window.PROGRAMME = {
       { name: "Hammer Curl",     sets: 3, reps: "10-12", rest: 60, step: 1 }
     ]
   },
-
-  fri: { kind: "pt", label: "PT with Sophie", notionDay: "PT Fri" },
 
   // The weekend session. Offered on BOTH Sat and Sun; whichever he does, it is
   // the same session and logs under the same notionDay.
