@@ -2,6 +2,11 @@
 // and a bonus slot, each a list of exercises from the library. A slot reaches
 // the Log tab only once it is LOCKED; until then it is a draft.
 //
+// Since 3 Oct 2026 Mon–Fri mornings are the programme in programme.js and are
+// shown here read-only — the programme wins over any slot locked for them. The
+// Sat/Sun morning slots and every bonus slot still work as before (a bonus slot
+// reaches the Log only once the pool of missed work is empty).
+//
 // Unlike logging, planning is not offline-first. It happens at a desk, not at
 // the rack, and a plan that only exists on one phone is not a plan anyone else
 // can see. Every change goes straight to D1 and the screen shows what D1 said.
@@ -13,7 +18,7 @@
               ["fri","Friday"],["sat","Saturday"],["sun","Sunday"]];
   var SLOT_LABEL = { morning: "Morning", bonus: "Bonus" };
 
-  var L = window.IronLog;
+  var L = window.IronLog, P = window.PROGRAMME;
   var esc = L.esc, fmtW = L.fmtW;
   var maxesInfo = null;       // { rows, last } from /api/rep-maxes
   var away = null;            // /api/away: { connected, days: [iso…], error? }
@@ -173,15 +178,18 @@
 
     h += awayStrip();
 
-    h += '<p class="note">Tap a slot to set its exercises, then lock it. Only locked slots appear in the Log. ' +
-         'A day with nothing locked keeps the current programme. The plan repeats every week.</p>';
+    h += '<p class="note">Monday to Friday mornings are the programme (edited in programme.js, not here). ' +
+         'Tap a weekend or bonus slot to set its exercises, then lock it — only locked slots appear in the Log. ' +
+         'A locked bonus is offered once the pool of missed work is empty. The plan repeats every week.</p>';
 
     DAYS.forEach(function(d){
       var off = awayOn(d[0]);
       h += '<div class="card pday"><h2>' + d[1] +
            (off.length ? '<span class="awaytag">✈ Away ' + esc(off.join(", ")) + '</span>' : '') +
            '</h2><div class="slots">' +
-           ["morning","bonus"].map(function(sl){ return slotTile(slotOf(d[0], sl)); }).join("") +
+           ["morning","bonus"].map(function(sl){
+             return sl === "morning" && P.days[d[0]] ? programmeTile(d[0]) : slotTile(slotOf(d[0], sl));
+           }).join("") +
            '</div></div>';
     });
 
@@ -213,6 +221,18 @@
         return '<button class="li" data-rm="' + esc(x.name) + '"><span>' + esc(x.name) + tags(x) + '</span>' +
                '<small>' + x.sets + '×' + esc(x.reps) + (x.weight != null ? ' @ ' + fmtW(x.weight) + (x.kind === "banded" ? " band" : " kg") : '') + '</small></button>';
       }).join("");
+  }
+
+  // A programme day: its blocks, read-only. Supersets are written "A + B".
+  function programmeTile(day){
+    var p = P.days[day];
+    return '<div class="slot locked prog" style="cursor:default">' +
+             '<div class="st"><span>Morning</span><span class="lk">Programme</span></div>' +
+             '<ul>' + p.blocks.map(function(b){
+               return '<li>' + b.map(function(x){ return esc(x.ex) + ' ' + x.sets + '×' + esc(x.reps); }).join(' + ') + '</li>';
+             }).join("") + '</ul>' +
+             (p.ptAlternative ? '<div class="none">or PT with Sophie</div>' : '') +
+           '</div>';
   }
 
   function slotTile(s){

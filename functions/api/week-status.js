@@ -5,8 +5,11 @@
 // Two of the programme's rules need this and cannot be answered from the phone:
 //   1. A bonus session must NOT satisfy the day's core session. The UI has to
 //      keep showing an unlogged core day as outstanding even after a bonus.
-//   2. The weekend session floats between Saturday and Sunday. If Saturday's was
-//      done, Sunday must not offer it again.
+//   2. The pool of missed work and the weekly volume tally (public/week.js) are
+//      worked out from what was logged per day × exercise — `rows` below.
+//
+// The client asks with the date on the Europe/London clock, so the week here is
+// the pool's week: it ends Sunday 23:59 London time.
 export async function onRequestGet({ request, env }) {
   const date = new URL(request.url).searchParams.get("date");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) {
@@ -27,6 +30,12 @@ export async function onRequestGet({ request, env }) {
         GROUP BY day, date ORDER BY date`
     ).bind(iso(monday), iso(sunday)).all();
 
+    const { results: rows } = await env.DB.prepare(
+      `SELECT day, date, exercise, COUNT(*) AS sets
+         FROM sets WHERE date >= ? AND date <= ?
+        GROUP BY day, date, exercise ORDER BY date`
+    ).bind(iso(monday), iso(sunday)).all();
+
     const core = {}, bonus = [];
     for (const r of results || []) {
       if (String(r.day).startsWith("bonus:")) {
@@ -38,7 +47,7 @@ export async function onRequestGet({ request, env }) {
         else { cur.sets += r.sets; }
       }
     }
-    return json({ weekStart: iso(monday), weekEnd: iso(sunday), core, bonus });
+    return json({ weekStart: iso(monday), weekEnd: iso(sunday), core, bonus, rows: rows || [] });
   } catch (e) {
     return json({ error: String(e?.message || e) }, 500);
   }
