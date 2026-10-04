@@ -96,3 +96,10 @@ test("warm-up sets earn no volume, PT lifts count by their library muscle", () =
   assert.equal(t["Rear delts"], 0);
   assert.equal(t.Legs, 4);
 });
+
+test("every lift that can land in the pool works at least one tallied muscle", () => {
+  for (const d of Object.values(P.days)) for (const b of d.blocks) for (const s of b) {
+    const e = P.exercises[s.ex];
+    assert.ok((e.direct || []).length + (e.indirect || []).length > 0, s.ex);
+  }
+});
