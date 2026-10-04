@@ -215,7 +215,12 @@
   .poolcard{border-left:3px solid var(--warn)}
   .plist{margin:0; padding:0; list-style:none; font-size:14px}
   .plist li{padding:3px 0}
-  .tally .trow{display:grid; grid-template-columns:90px 1fr 82px; gap:10px; align-items:center;
+  .plist li.pday{padding-top:8px}
+  .plist li.pday:first-child{padding-top:0}
+  .mtags .tag:first-child{margin-left:6px}
+  .target .mtags .tag:first-child{margin-left:0}
+  .mtags .tag{margin-right:4px}
+  .tally .trow{display:grid; grid-template-columns:90px 1fr 100px; gap:10px; align-items:center;
     font-size:14px; padding:4px 0}
   .tally .tbar{height:8px; border-radius:999px; background:var(--panel-2); overflow:hidden}
   .tally .tbar i{display:block; height:100%; background:var(--muted)}
@@ -737,6 +742,15 @@
 
   var DAY_NAME = { mon:"Mon", tue:"Tue", wed:"Wed", thu:"Thu", fri:"Fri", sat:"Sat", sun:"Sun" };
 
+  // One tag per muscle a lift works, with the credit it earns in the weekly
+  // tally: "Biceps x1" for a direct set, "Traps x0.5" for an indirect one.
+  function muscleTags(name){
+    var e = P.exercises[name] || {};
+    var t = (e.direct || []).map(function(m){ return m + " x1"; })
+      .concat((e.indirect || []).map(function(m){ return m + " x0.5"; }));
+    return t.length ? '<span class="mtags">' + t.map(function(x){ return '<span class="tag">' + esc(x) + '</span>'; }).join("") + '</span>' : '';
+  }
+
   function poolCardHTML(){
     var pool = poolNow();
     if (state.mode === "pool"){
@@ -749,9 +763,9 @@
     return '<div class="card poolcard"><div class="cardhead"><h2>Pool · ' + pool.total + ' set' + (pool.total === 1 ? '' : 's') + '</h2>' +
              '<button class="smallbtn" data-mode="pool">Work the pool</button></div>' +
            '<ul class="plist">' + Object.keys(byDay).map(function(d){
-             return '<li><b>' + DAY_NAME[d] + '</b> ' + byDay[d].map(function(m){
-               return esc(m.exercise) + ' <span class="pmark">' + m.remaining + '</span>';
-             }).join(' · ') + '</li>';
+             return '<li class="pday"><b>' + DAY_NAME[d] + '</b></li>' + byDay[d].map(function(m){
+               return '<li>' + esc(m.exercise) + ' <span class="pmark">' + m.remaining + '</span>' + muscleTags(m.exercise) + '</li>';
+             }).join("");
            }).join("") + '</ul>' +
            '<p class="note" style="margin:6px 0 0">Clears Sunday 23:59 (London). Bonus work unlocks once it is empty.</p></div>';
   }
@@ -789,7 +803,8 @@
       '<div class="target">' + (ex.sets ? ex.sets + ' × ' : '') + esc(ex.reps) + ' reps' + (ex.side ? " per side" : "") + ' · ' + ex.rest + 's rest' +
         (ex.kit ? ' <span class="tag">' + esc(ex.kit) + '</span>' : '') +
         (ex.suggested != null ? ' · suggested <b>' + fmtW(ex.suggested) + (ex.band ? ' (band)' : ' kg') + '</b>' : '') + '</div>' +
-      (ex.from ? '<div class="target">From ' + ex.from.map(function(f){ return DAY_NAME[f.day] + ' ' + f.sets; }).join(' · ') + '</div>' : '') +
+      (ex.from ? '<div class="target">From ' + ex.from.map(function(f){ return DAY_NAME[f.day] + ' ' + f.sets; }).join(' · ') + '</div>' +
+                 '<div class="target">' + muscleTags(ex.name) + '</div>' : '') +
       (ex.cues && ex.cues.length ? '<ul class="cues">' + ex.cues.map(function(c){ return '<li>' + esc(c) + '</li>'; }).join("") + '</ul>' : '') +
       '<div class="last">' + (last
           ? 'Last time: <b>' + esc(last.summary) + '</b>' + (last.date ? ' · ' + esc(last.date) : '')
