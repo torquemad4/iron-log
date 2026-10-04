@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS exercises (
   rest       INTEGER NOT NULL DEFAULT 75,
   step       REAL,                                  -- +/- increment; null = default
   side       INTEGER NOT NULL DEFAULT 0,            -- 1 = logged per arm/side
-  muscle     TEXT,                                  -- Chest|Back|Shoulders|Biceps|Triceps|Legs|Core|Full body
+  muscle     TEXT,                                  -- Chest|Back|Shoulders|Traps|Biceps|Triceps|Legs|Core|Full body
   equipment  TEXT,                                  -- barbell|dumbbell|band|bodyweight|kettlebell|other
   added_by   TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -99,3 +99,19 @@ INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side, muscl
   ('Skull Crusher',                'weighted', 3, '10-12', 75, 2.5, 0, 'Triceps',   'barbell'),
   ('Banded Straight-Arm Pulldown', 'banded',   3, '10-15', 60, 1,   0, 'Back',      'band'),
   ('Incline DB Press',             'weighted', 3, '8-12',  75, 2,   0, 'Chest',     'dumbbell');
+
+-- The programme of 3 Oct 2026. Lifts it shares with the library above (DB Curl,
+-- Skull Crusher, Rear Delt Flye, Hammer Curl, Single-Arm DB Row, Banded Lat
+-- Pulldown) keep their existing rows, and their history. INSERT OR IGNORE, so a
+-- row already there — Barbell Back Squat, say, from the Trainerize import — is
+-- left exactly as it is.
+INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side, muscle, equipment) VALUES
+  ('Close-Grip Floor Press',          'weighted', 4, '8-12',  90,  2.5, 0, 'Chest',     'barbell'),
+  ('One-Arm DB Lateral Raise',        'weighted', 3, '12-20', 60,  1,   1, 'Shoulders', 'dumbbell'),
+  ('Barbell Shrug',                   'weighted', 4, '10-15', 75,  2.5, 0, 'Traps',     'barbell'),
+  ('Barbell Bicep Curl',              'weighted', 3, '8-12',  75,  2.5, 0, 'Biceps',    'barbell'),
+  ('Neutral-Grip DB Overhead Press',  'weighted', 3, '8-12',  90,  2,   0, 'Shoulders', 'dumbbell'),
+  ('Barbell Back Squat',              'weighted', 3, '6-10',  150, 2.5, 0, 'Legs',      'barbell'),
+  ('Barbell Deadlift',                'weighted', 3, '5-8',   180, 5,   0, 'Legs',      'barbell'),
+  ('Band Pull-Apart',                 'banded',   2, '15-20', 30,  1,   0, 'Shoulders', 'band'),
+  ('Side-Lying DB External Rotation', 'weighted', 2, '12-15', 30,  1,   1, 'Shoulders', 'dumbbell');

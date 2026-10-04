@@ -143,6 +143,8 @@
   .slot ul{margin:0; padding:0; list-style:none; font-size:13px; line-height:1.4}
   .slot li{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .slot .none{color:var(--muted); font-size:13px}
+  .slot{min-width:0}
+  .slot.prog li{white-space:normal}
   .tag{display:inline-block; font-size:11px; font-weight:700; padding:1px 7px; border-radius:999px;
     border:1px solid var(--line); color:var(--muted); margin-left:6px; vertical-align:1px}
   .lib .li{display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%;
@@ -198,6 +200,30 @@
   .calc.today{border-color:var(--accent)}
   .calc.away{background:repeating-linear-gradient(135deg,#3a1f24 0 6px,#2a171b 6px 12px); border-color:#7a3340}
   .calc.away b{color:#ff8a9a; font-size:11px}
+  /* ---------- blocks, pool, tally ---------- */
+  .blk.ss{border-left:3px solid var(--line); padding-left:10px; margin-bottom:6px}
+  .blockhead{font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--muted); margin:4px 0 8px}
+  .card.next{border-color:var(--accent)}
+  .nexttag{font-size:11px; font-weight:800; color:var(--accent-ink); background:var(--accent);
+    border-radius:999px; padding:1px 8px; vertical-align:3px; letter-spacing:.04em}
+  .cues{margin:6px 0 4px; padding-left:18px; font-size:13px; color:var(--warn)}
+  .cues li{margin:2px 0}
+  details.warm{margin-bottom:14px}
+  details.warm summary{cursor:pointer; color:var(--muted); font-size:14px; font-weight:700;
+    padding:10px 0; min-height:44px}
+  .poolcard{border-left:3px solid var(--warn)}
+  .plist{margin:0; padding:0; list-style:none; font-size:14px}
+  .plist li{padding:3px 0}
+  .tally .trow{display:grid; grid-template-columns:90px 1fr 82px; gap:10px; align-items:center;
+    font-size:14px; padding:4px 0}
+  .tally .tbar{height:8px; border-radius:999px; background:var(--panel-2); overflow:hidden}
+  .tally .tbar i{display:block; height:100%; background:var(--muted)}
+  .tally .s-on .tbar i{background:var(--good)}
+  .tally .s-over .tbar i{background:var(--accent)}
+  .tally .s-under .tbar i{background:var(--warn)}
+  .tally .tv{text-align:right; font-variant-numeric:tabular-nums; color:var(--muted)}
+  .tally .tv b{color:var(--ink)}
   .awaytag{font-size:12px; font-weight:700; color:#ff8a9a; margin-left:10px; vertical-align:2px}
 </style>
 </head>
@@ -324,6 +350,7 @@
 </dialog>
 
 <script src="programme.js"></script>
+<script src="week.js"></script>
 <script>
 (function(){
   "use strict";
@@ -336,12 +363,15 @@
   var STARTED = "ironlog.started.v1";
   var PLAN    = "ironlog.plan.v1";    // last copy of the planner, so the gym
   var LIB     = "ironlog.lib.v1";     // still gets Sophie's sessions offline
+  var WEEK    = "ironlog.week.v1";    // last /api/week-status, so the pool and the
+                                      // tally still show at the rack with no signal
 
   var state = {
     day: null,          // weekday key of the CORE session in view
-    mode: "core",       // "core" | "bonus" — a bonus never replaces a core
-    bonusId: null,      // which of the five, when mode === "bonus"
-    week: null,         // /api/week-status, so an unlogged core stays outstanding
+    mode: "core",       // "core" | "pool" | "pt" | "bonus" — none of the others replaces core
+    bonusId: null,      // which bonus, when mode === "bonus"
+    chosen: false,      // the session in view was picked (or resumed), not defaulted
+    week: null,         // /api/week-status: the week's sets, for the pool and the tally
     date: todayISO(),
     sets: [],           // sets logged today (local truth)
     last: {},           // exercise -> previous session summary
@@ -508,9 +538,11 @@
   }
 
   function fetchWeek(){
-    return fetch("/api/week-status?date=" + encodeURIComponent(state.date))
+    /* Asked on the London clock: the pool's days end, and its week resets, at
+       midnight Europe/London whatever timezone the phone is in. */
+    return fetch("/api/week-status?date=" + encodeURIComponent(londonToday()))
       .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(j){ if (j && j.core) state.week = j; })
+      .then(function(j){ if (j && j.core && j.rows) { state.week = j; write(WEEK, j); } })
       .catch(function(){ /* the picker degrades to "not known", never to "done" */ });
   }
 
@@ -524,12 +556,17 @@
   }
 
   // ---------- which session is in view ----------
-  /* ⭐ A LOCKED planner slot wins over programme.js. A day Sophie has not
-     planned — or has planned but not locked — keeps the programme it had, so
-     the planner can be filled in gradually without breaking the log. */
+  /* ⭐ Mon–Fri come from programme.js, always. A locked Planner MORNING slot
+     only fills a day the programme leaves empty (Sat/Sun), and a locked
+     Planner BONUS slot replaces the bonus menu for its day. Decided 3 Oct 2026,
+     so that a slot locked under the old programme cannot silently hide the new
+     one. */
+  var P = window.PROGRAMME, W = window.IronWeek;
+
+  function lc(s){ return String(s).toLowerCase(); }
   function libEntry(name){
-    var n = String(name).toLowerCase();
-    for (var i = 0; i < state.lib.length; i++) if (state.lib[i].name.toLowerCase() === n) return state.lib[i];
+    var n = lc(name);
+    for (var i = 0; i < state.lib.length; i++) if (lc(state.lib[i].name) === n) return state.lib[i];
     return null;
   }
   function planSlot(day, slot){
@@ -539,72 +576,264 @@
     }
     return null;
   }
+  function cuesFor(name){
+    var e = P.exercises[name] || {};
+    return (e.cues || []).map(function(c){ return P.cues[c]; }).filter(Boolean).concat(e.note ? [e.note] : []);
+  }
+  function isWarm(name){
+    return P.warmup.choices.some(function(c){ return lc(c.ex) === lc(name); });
+  }
+
+  // Programme blocks -> the session the page renders.
+  function fromBlocks(label, blocks, extra){
+    var s = W.expand(P, blocks);
+    var out = { label: label, blocks: s.blocks, exercises: s.exercises };
+    for (var k in extra) out[k] = extra[k];
+    return out;
+  }
+  // The optional warm-up sits outside the three-block cap, ahead of block 1.
+  function withWarmup(sess){
+    var w = W.expand(P, P.warmup.choices.map(function(c){ return [c]; })).exercises;
+    w.forEach(function(e){ e.warm = true; });
+    sess.warmup = w;
+    sess.exercises = w.concat(sess.exercises);
+    sess.exercises.forEach(function(e, i){ e.index = i; });
+    return sess;
+  }
+  // Exercises with no blocks of their own (Planner, pool, PT): straight sets.
+  function straight(label, exs, extra){
+    exs.forEach(function(e, i){ e.block = i; e.index = i; });
+    var out = { label: label, exercises: exs,
+                blocks: exs.map(function(e){ return { superset: false, exercises: [e] }; }) };
+    for (var k in extra) out[k] = extra[k];
+    return out;
+  }
+  function fromLibrary(name, sets, reps, weight){
+    var l = libEntry(name) || {}, e = P.exercises[name] || {};
+    return { name: name, sets: sets != null ? sets : (l.sets || 3), reps: reps || l.reps || "8-12",
+             suggested: weight != null ? weight : (l.weight != null ? l.weight : null), kit: null,
+             rest: e.rest != null ? e.rest : (l.rest != null ? l.rest : 75), step: e.step || l.step || null,
+             band: !!e.band || l.kind === "banded", side: !!(e.side || l.side), cues: cuesFor(name) };
+  }
+
   function plannedSession(day, slot){
     var p = planSlot(day, slot);
     if (!p || !p.locked || !p.exercises || !p.exercises.length) return null;
-    return {
-      kind: "core", planned: true,
-      label: slot === "morning" ? "Morning — planned" : "Planned",
-      exercises: p.exercises.map(function(x){
-        var l = libEntry(x.name) || {};
-        return {
-          name: x.name, sets: x.sets, reps: x.reps, suggested: x.weight,
-          rest: l.rest != null ? l.rest : 75, step: l.step || null,
-          band: l.kind === "banded", side: !!l.side
-        };
-      })
-    };
+    return straight(slot === "morning" ? "Planned session" : "Planned bonus",
+      p.exercises.map(function(x){ return fromLibrary(x.name, x.sets, x.reps, x.weight); }),
+      { planned: true });
   }
-  function coreFor(day){ return plannedSession(day, "morning") || window.sessionForDay(day); }
+  function coreFor(day){
+    var d = P.days[day];
+    if (d) return withWarmup(fromBlocks(d.label, d.blocks,
+      { core: true, heads: true, minutes: d.minutes, ptAlternative: !!d.ptAlternative }));
+    var p = plannedSession(day, "morning");
+    if (p) p.core = true;
+    return p;
+  }
   function planBonusId(){ return "plan-" + state.day; }
+  // A planned bonus for today replaces the menu: the point of planning it is
+  // that there is one answer, not a choice.
+  function bonusChoices(){
+    if (plannedSession(state.day, "bonus")) {
+      var o = {}; o[planBonusId()] = { label: "Planned bonus" }; return o;
+    }
+    return P.bonus;
+  }
+
+  // ---------- the week: pool and tally ----------
+  function londonToday(){ return W.todayIn(P.timezone); }
+  function weekKnown(){
+    return !!(state.week && state.week.rows && state.week.weekStart === W.weekDates(londonToday()).mon);
+  }
+  function weekRows(){ return W.mergeRows(weekKnown() ? state.week.rows : [], state.sets, state.date); }
+  // null while this week's sets have not loaded: an unknown pool must never
+  // read as "empty" (it would unlock bonus work) or as "everything missed".
+  function poolNow(){ return weekKnown() ? W.computePool(P, weekRows(), londonToday()) : null; }
+  // The pool as it stood before today's pool work, so a pool session keeps its
+  // shape — sets already worked off today show as done rather than vanishing.
+  function poolAtStart(){
+    if (!weekKnown()) return null;
+    var rows = weekRows().filter(function(r){ return !(r.day === "pool" && r.date === state.date); });
+    return W.computePool(P, rows, londonToday());
+  }
+  function poolSession(){
+    var start = poolAtStart();
+    if (!start) return null;
+    var exs = start.exercises.map(function(p){
+      var e = fromLibrary(p.exercise, p.remaining, p.reps);
+      e.kit = p.kit; e.from = p.from;
+      return e;
+    });
+    // Anything worked off today that is no longer in the starting pool (a
+    // second device, say) still shows, so its sets can be corrected.
+    state.sets.forEach(function(s){
+      if (s.day === "pool" && !exs.some(function(e){ return lc(e.name) === lc(s.exercise); }))
+        exs.push(fromLibrary(s.exercise, 0));
+    });
+    return straight("Pool — catch-up", exs, { pool: true });
+  }
+
+  var PT = "ironlog.pt.v1";            // today's PT exercise list, this device
+  function ptNames(){
+    var p = read(PT, null), names = (p && p.date === state.date) ? p.names.slice() : [];
+    state.sets.forEach(function(s){ if (s.day === "pt" && names.indexOf(s.exercise) < 0) names.push(s.exercise); });
+    return names;
+  }
+  function ptSession(){
+    return straight(P.ptLabel, ptNames().map(function(n){ return fromLibrary(n); }), { pt: true });
+  }
 
   function currentSession(){
+    if (state.mode === "pool") return poolSession();
+    if (state.mode === "pt") return ptSession();
     if (state.mode === "bonus"){
       if (String(state.bonusId).indexOf("plan-") === 0) return plannedSession(String(state.bonusId).slice(5), "bonus");
-      return window.BONUS[state.bonusId] || null;
+      var b = P.bonus[state.bonusId];
+      return b ? fromBlocks(b.label, b.blocks, { bonus: true, heads: true }) : null;
     }
     return coreFor(state.day);
   }
   function isBonus(){ return state.mode === "bonus"; }
 
-  // The weekend session floats between Sat and Sun and is ONE session, so both
-  // days log under the same key. Otherwise a Saturday session and a Sunday one
-  // would look like two different sessions in the history.
-  function coreDayKey(){
-    var s = coreFor(state.day);
-    return (s && s.floats) ? "weekend" : state.day;
+  // What goes in the `day` column. Bonus, pool and PT sets are kept apart from
+  // the planned day's so the pool and the history can tell them apart.
+  function logDay(){
+    if (state.mode === "bonus") return "bonus:" + state.bonusId;
+    if (state.mode === "pool") return "pool";
+    if (state.mode === "pt") return "pt";
+    return state.day;
   }
-  // What actually goes in the `day` column. Bonus sets are namespaced so core
-  // and bonus stay separable in D1 and the volume maths stays right.
-  function logDay(){ return isBonus() ? ("bonus:" + state.bonusId) : coreDayKey(); }
 
   // Any sets logged today for the session in view.
   function setsToday(){
     var d = logDay();
     return state.sets.some(function(s){ return s.day === d; });
   }
-  // A day with no session (nothing in programme.js, nothing locked in the
-  // Planner) prescribes nothing, so nothing is outstanding on it.
-  function coreIsPrescribed(){
-    var s = coreFor(state.day);
-    return !!(s && s.kind === "core");
-  }
-
+  // Today's planned session has working sets logged (a warm-up alone is not it).
   function coreLogged(){
-    var k = coreDayKey(), w = state.week && state.week.core;
-    return !!(w && w[k] && w[k].sets > 0);
+    return weekRows().some(function(r){ return r.day === state.day && r.sets > 0 && !isWarm(r.exercise); });
   }
-  // Saturday's session done means Sunday must not offer it again.
-  function weekendDone(){
-    var w = state.week && state.week.core;
-    return !!(w && w.weekend && w.weekend.sets > 0);
+  function ptLogged(){
+    return weekRows().some(function(r){ return r.day === "pt" && r.sets > 0; });
   }
 
   function setsFor(name){
-    // Scoped to the session in view: the same lift can appear in today's core
-    // AND in a bonus session later the same day, and they are different sets.
+    // Scoped to the session in view: the same lift can appear in today's
+    // session AND in pool work later the same day, and they are different sets.
     var d = logDay();
     return state.sets.filter(function(s){ return s.exercise === name && s.day === d; });
+  }
+
+  // In a superset, the lift to do next: the one behind, the first on a tie.
+  function nextInBlock(b){
+    var best = null, bestN = Infinity;
+    b.exercises.forEach(function(e){
+      var n = setsFor(e.name).length;
+      if (n < e.sets && n < bestN){ best = e; bestN = n; }
+    });
+    return best;
+  }
+
+  var DAY_NAME = { mon:"Mon", tue:"Tue", wed:"Wed", thu:"Thu", fri:"Fri", sat:"Sat", sun:"Sun" };
+
+  function poolCardHTML(){
+    var pool = poolNow();
+    if (state.mode === "pool"){
+      return '<p class="note">Sets missed earlier this week. Log them as normal — each one comes off the pool. ' +
+             'The pool clears Sunday 23:59 (London); anything left then drops off.</p>';
+    }
+    if (!pool || !pool.total) return "";
+    var byDay = {};
+    pool.items.forEach(function(m){ (byDay[m.day] = byDay[m.day] || []).push(m); });
+    return '<div class="card poolcard"><div class="cardhead"><h2>Pool · ' + pool.total + ' set' + (pool.total === 1 ? '' : 's') + '</h2>' +
+             '<button class="smallbtn" data-mode="pool">Work the pool</button></div>' +
+           '<ul class="plist">' + Object.keys(byDay).map(function(d){
+             return '<li><b>' + DAY_NAME[d] + '</b> ' + byDay[d].map(function(m){
+               return esc(m.exercise) + ' <span class="pmark">' + m.remaining + '</span>';
+             }).join(' · ') + '</li>';
+           }).join("") + '</ul>' +
+           '<p class="note" style="margin:6px 0 0">Clears Sunday 23:59 (London). Bonus work unlocks once it is empty.</p></div>';
+  }
+
+  function fmtSets(n){ return (Math.round(n * 2) / 2).toString().replace(/\.5$/, "½").replace(/^0½$/, "½"); }
+  function tallyHTML(){
+    if (!weekKnown()) return '<div class="card tally"><div class="cardhead"><h2>This week</h2></div>' +
+      '<p class="note" style="margin:0">Volume shows once this week&rsquo;s sets have loaded.</p></div>';
+    var t = W.tally(P, weekRows(), state.lib);
+    return '<div class="card tally"><div class="cardhead"><h2>This week</h2>' +
+             '<span class="note" style="margin:0">sets · direct 1, indirect ½</span></div>' +
+      t.map(function(r){
+        var target = r.min == null ? "—" : (r.approx ? "~" + r.min : (r.min === r.max ? r.min : r.min + "–" + r.max));
+        var top = r.max || r.min || 0;
+        var pct = top ? Math.min(100, Math.round(r.sets / top * 100)) : 0;
+        return '<div class="trow s-' + r.status + '"><span class="tm">' + esc(r.muscle) + '</span>' +
+               '<span class="tbar">' + (top ? '<i style="width:' + pct + '%"></i>' : '') + '</span>' +
+               '<span class="tv"><b>' + fmtSets(r.sets) + '</b> / ' + target + '</span></div>';
+      }).join("") + '</div>';
+  }
+
+  function cardHTML(ex, isNext, i){
+    var done = setsFor(ex.name);
+    var last = state.last[ex.name];
+    var complete = ex.sets > 0 && done.length >= ex.sets;
+    var prefill = suggest(ex, last, done);
+    return '<div class="card' + (complete ? " done" : "") + (isNext ? " next" : "") + '">' +
+      '<div class="exhead">' +
+        '<p class="exname">' + esc(ex.name) + (isNext ? ' <span class="nexttag">Next</span>' : '') + '</p>' +
+        '<span style="display:flex;gap:6px">' +
+          '<button type="button" class="formlink" style="background:none;cursor:pointer" data-rm="' + esc(ex.name) + '">Maxes</button>' +
+          '<a class="formlink" href="' + formLink(ex.name) + '" target="_blank" rel="noopener noreferrer">Form &#8599;</a>' +
+        '</span>' +
+      '</div>' +
+      '<div class="target">' + (ex.sets ? ex.sets + ' × ' : '') + esc(ex.reps) + ' reps' + (ex.side ? " per side" : "") + ' · ' + ex.rest + 's rest' +
+        (ex.kit ? ' <span class="tag">' + esc(ex.kit) + '</span>' : '') +
+        (ex.suggested != null ? ' · suggested <b>' + fmtW(ex.suggested) + (ex.band ? ' (band)' : ' kg') + '</b>' : '') + '</div>' +
+      (ex.from ? '<div class="target">From ' + ex.from.map(function(f){ return DAY_NAME[f.day] + ' ' + f.sets; }).join(' · ') + '</div>' : '') +
+      (ex.cues && ex.cues.length ? '<ul class="cues">' + ex.cues.map(function(c){ return '<li>' + esc(c) + '</li>'; }).join("") + '</ul>' : '') +
+      '<div class="last">' + (last
+          ? 'Last time: <b>' + esc(last.summary) + '</b>' + (last.date ? ' · ' + esc(last.date) : '')
+          : 'No previous record — this one sets the baseline.') + '</div>' +
+      '<div class="chips">' +
+        done.map(function(s, idx){
+          return '<button type="button" class="chip' + (idx === done.length - 1 ? " fresh" : "") + '" ' +
+                 'data-edit="' + esc(s.id) + '" aria-label="Edit set ' + (idx + 1) + '">' +
+                 s.reps + ' × ' + fmtW(s.weight) + '</button>';
+        }).join("") +
+      '</div>' +
+      '<div class="steppers">' +
+        stepperHTML(i, "reps", "Reps", prefill.reps, 1) +
+        stepperHTML(i, "weight", ex.band ? "Band level" : "Weight kg", prefill.weight, ex.step || (ex.band ? 1 : 2.5)) +
+      '</div>' +
+      '<button class="logbtn" data-log="' + i + '">' +
+        (complete || !ex.sets ? "Log an extra set" : "Log set " + (done.length + 1) + " of " + ex.sets) +
+      '</button>' +
+    '</div>';
+  }
+
+  function ptAddHTML(){
+    return '<div class="card"><div class="cardhead"><h2>Add an exercise</h2></div>' +
+      '<p class="note">Whatever Sophie has you doing. Pick from the library or type a new name.</p>' +
+      '<div class="addrow" style="margin-top:0">' +
+        '<input id="ptName" list="ptLib" placeholder="Exercise" autocomplete="off" ' +
+          'style="flex:1;min-width:0;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:11px;font-size:16px">' +
+        '<datalist id="ptLib">' + state.lib.map(function(l){ return '<option value="' + esc(l.name) + '">'; }).join("") + '</datalist>' +
+        '<button id="ptAdd">Add</button>' +
+      '</div></div>';
+  }
+  function wirePt(){
+    var b = document.getElementById("ptAdd");
+    if (!b) return;
+    b.onclick = function(){
+      var v = document.getElementById("ptName").value.trim().replace(/\s+/g, " ");
+      if (!v) return;
+      var l = libEntry(v); if (l) v = l.name;          // keep the library's spelling, so history joins up
+      var names = ptNames();
+      if (names.some(function(n){ return lc(n) === lc(v); })) return;
+      names.push(v);
+      write(PT, { date: state.date, names: names });
+      render(); fetchLast().then(render);
+    };
   }
 
   function render(){
@@ -613,76 +842,70 @@
     document.getElementById("dayLabel").textContent =
       prog ? (isBonus() ? "Bonus — " + prog.label : prog.label) : "—";
 
+    var html = poolCardHTML();
+
     if (!prog){
-      app.innerHTML =
+      var weekend = state.day === "sat" || state.day === "sun";
+      var pool = poolNow();
+      app.innerHTML = html +
         '<div class="card"><div class="rest-day">' +
-          '<h2>Nothing planned today</h2>' +
-          '<p>No session is set for today. Lock one in the Planner to have it show here, ' +
-             'or pick a bonus above.</p>' +
-        '</div></div>' + footHTML();
-      wireFoot();
+          '<h2>' + (state.mode === "pool" ? "Pool not loaded yet" : "Nothing planned today") + '</h2>' +
+          '<p>' + (state.mode === "pool"
+            ? "This week&rsquo;s sets have not loaded, so the pool is not known yet. It appears once the server answers."
+            : (weekend ? "No planned work at the weekend — it is for catching up. " : "") +
+              (pool && pool.total ? "Work the pool above." : (pool ? "The pool is empty: pick a bonus above if you fancy one." : ""))) + '</p>' +
+        '</div></div>' + tallyHTML() + footHTML();
+      wireTop(); wireFoot();
       return;
     }
 
-    // The weekend session is one session across two days. If it was done on
-    // Saturday, Sunday offers bonus work instead of offering it twice.
-    if (!isBonus() && prog.floats && weekendDone() && !setsToday()){
-      app.innerHTML =
-        '<div class="card"><div class="rest-day">' +
-          '<h2>Weekend session done</h2>' +
-          '<p>Logged already this week, so there is nothing core left. ' +
-             'Pick a bonus session above if you fancy one.</p>' +
-        '</div></div>' + footHTML();
-      wireFoot();
-      return;
+    // Pool work, a bonus or PT adds to the week; it does not stand in for
+    // today's planned session (PT stands in for Wednesday only, by design).
+    var today = coreFor(state.day);
+    if (state.mode !== "core" && today && !coreLogged() && !(state.mode === "pt" && today.ptAlternative)){
+      html += '<div class="card outstanding"><b>Today&rsquo;s session is still outstanding.</b> ' +
+              'This adds to the week; it does not stand in for it.</div>';
     }
 
-    var outstanding = isBonus() && !coreLogged() && coreIsPrescribed();
-    var html = outstanding
-      ? '<div class="card outstanding"><b>Today&rsquo;s core session is still outstanding.</b> ' +
-        'A bonus adds to the week; it does not stand in for a core day.</div>'
-      : "";
+    if (prog.core && prog.minutes){
+      html += '<p class="note">Up to ' + prog.minutes + ' min. ' + esc(P.effort) + ' ' + esc(P.progression) + '</p>';
+    }
+    if (prog.pool && !prog.exercises.length){
+      html += '<div class="card"><div class="rest-day"><h2>Pool is empty</h2><p>Nothing missed this week.</p></div></div>';
+    }
+    if (prog.pt && !prog.exercises.length){
+      html += '<p class="note">Log the PT session here instead of the solo leg day. Once a set is logged, the squats and deadlifts stay out of the pool.</p>';
+    }
 
-    prog.exercises.forEach(function(ex, i){
-      var done = setsFor(ex.name);
-      var last = state.last[ex.name];
-      var complete = done.length >= ex.sets;
-      var prefill = suggest(ex, last, done);
+    if (prog.warmup){
+      var warmDone = prog.warmup.some(function(e){ return setsFor(e.name).length; });
+      html += '<details class="warm"' + (warmDone ? ' open' : '') + '><summary>' + esc(P.warmup.label) +
+              ' — pick one, 2 light sets</summary>' +
+              prog.warmup.map(function(e){ return cardHTML(e, false, e.index); }).join("") + '</details>';
+    }
 
-      html +=
-      '<div class="card'+(complete?" done":"")+'">' +
-        '<div class="exhead">' +
-          '<p class="exname">'+esc(ex.name)+'</p>' +
-          '<span style="display:flex;gap:6px">' +
-            '<button type="button" class="formlink" style="background:none;cursor:pointer" data-rm="'+esc(ex.name)+'">Maxes</button>' +
-            '<a class="formlink" href="'+formLink(ex.name)+'" target="_blank" rel="noopener noreferrer">Form &#8599;</a>' +
-          '</span>' +
-        '</div>' +
-        '<div class="target">'+ex.sets+' × '+esc(ex.reps)+' reps'+(ex.side?" per side":"")+' · '+ex.rest+'s rest' +
-          (ex.suggested != null ? ' · suggested <b>'+fmtW(ex.suggested)+(ex.band?' (band)':' kg')+'</b>' : '') + '</div>' +
-        '<div class="last">'+ (last
-            ? 'Last time: <b>'+esc(last.summary)+'</b>'+(last.date? ' · '+esc(last.date):'')
-            : 'No previous record — this one sets the baseline.') +'</div>' +
-        '<div class="chips">' +
-          done.map(function(s,idx){
-            return '<button type="button" class="chip'+(idx===done.length-1?" fresh":"")+'" ' +
-                   'data-edit="'+esc(s.id)+'" aria-label="Edit set '+(idx+1)+'">' +
-                   s.reps+' × '+fmtW(s.weight)+'</button>';
-          }).join("") +
-        '</div>' +
-        '<div class="steppers">' +
-          stepperHTML(i,"reps","Reps",prefill.reps,1) +
-          stepperHTML(i,"weight",ex.band?"Band level":"Weight kg",prefill.weight,ex.step||(ex.band?1:2.5)) +
-        '</div>' +
-        '<button class="logbtn" data-log="'+i+'">' +
-          (complete ? "Log an extra set" : "Log set "+(done.length+1)+" of "+ex.sets) +
-        '</button>' +
+    prog.blocks.forEach(function(b, bi){
+      var nxt = b.superset ? nextInBlock(b) : null;
+      html += '<div class="blk' + (b.superset ? ' ss' : '') + '">' +
+        (prog.heads ? '<div class="blockhead">B' + (bi + 1) + ' · ' + (b.superset ? 'Superset — alternate set by set' : 'Straight sets') + '</div>' : '') +
+        b.exercises.map(function(e){ return cardHTML(e, nxt === e, e.index); }).join("") +
       '</div>';
     });
 
-    app.innerHTML = html + footHTML();
+    if (prog.pt) html += ptAddHTML();
+
+    app.innerHTML = html + tallyHTML() + footHTML();
     wireCards();
+    wireTop();
+    wirePt();
     wireFoot();
+  }
+
+  // Buttons in the page body that switch session ("Work the pool").
+  function wireTop(){
+    document.querySelectorAll("#app [data-mode]").forEach(function(b){
+      b.onclick = function(){ choose(b.dataset.mode, null); };
+    });
   }
 
   function suggest(ex, last, done){
@@ -739,7 +962,7 @@
   }
 
   function logSet(i){
-    var ex = currentSession().exercises[i];
+    var sess = currentSession(), ex = sess.exercises[i];
     var reps   = parseFloat(document.querySelector('[data-f="'+i+'|reps"]').value) || 0;
     var weight = parseFloat(document.querySelector('[data-f="'+i+'|weight"]').value) || 0;
     if (reps <= 0) return;
@@ -756,8 +979,19 @@
     state.sets.push(rec);
     saveLocal();
     queue(rec);
+    /* A superset alternates set by set: a short rest and the other lift next.
+       Once the other lift is finished (4 sets against 3), the rest is the
+       lift's own straight-set rest. */
+    var rest = ex.rest, label = "Rest — " + ex.name;
+    var blk = !ex.warm && sess.blocks[ex.block];
+    if (blk && blk.superset){
+      var other = blk.exercises.filter(function(e){ return e !== ex; })[0];
+      if (other && setsFor(other.name).length < other.sets) label = "Next: " + other.name;
+      else rest = (P.exercises[ex.name] || {}).rest || ex.rest;
+    }
+    buildPicker();
     render();
-    startRest(ex.rest, "Rest — " + ex.name);
+    startRest(rest, label);
   }
 
   // ---------- editing a logged set ----------
@@ -844,6 +1078,7 @@
     saveLocal();
     editingId = null;
     document.getElementById("editDlg").close();
+    buildPicker();
     render();
   };
 
@@ -882,6 +1117,7 @@
         }
         localStorage.removeItem(STARTED);
         stopRest();
+        fetchWeek().then(function(){ buildPicker(); render(); });
       })
       .catch(function(){
         btn.disabled = false; btn.textContent = "Finish & sync";
@@ -920,59 +1156,90 @@
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
   function fmtW(w){ var n = Math.round(parseFloat(w)*100)/100; return String(n); }
 
-  // Two choices, not seven days: today's core session, or a bonus.
+  // Today's session (and PT on Wednesday), the pool, and — only once the pool
+  // is empty — bonus work.
+  function choose(mode, bonusId){
+    state.mode = mode; state.bonusId = bonusId || null; state.chosen = true;
+    buildPicker();
+    render();
+    fetchLast().then(render);
+  }
+
   function buildPicker(){
     var p = document.getElementById("picker");
     var core = coreFor(state.day);
-    var coreOn = !isBonus();
     var h = "";
 
-    if (core && core.kind === "core" && !(core.floats && weekendDone() && !coreOn)) {
-      var mark = coreLogged() ? " · done" : (state.week ? " · not yet" : "");
+    if (core){
+      var mark = coreLogged() ? " · done" : (weekKnown() ? " · not yet" : "");
       h += '<div class="prow">' +
-             '<button class="wide' + (coreOn ? ' sel' : '') + '" data-core="1">' +
-               esc(core.label) + '<span class="pmark">' + mark + '</span>' +
-             '</button>' +
+             '<button class="' + (core.ptAlternative ? '' : 'wide') + (state.mode === "core" ? ' sel' : '') + '" data-mode="core">' +
+               esc(core.label) + '<span class="pmark">' + mark + '</span></button>' +
+             (core.ptAlternative
+               ? '<button class="' + (state.mode === "pt" ? 'sel' : '') + '" data-mode="pt">' + esc(P.ptLabel) +
+                 (ptLogged() ? ' <span class="pmark">✓</span>' : '') + '</button>'
+               : '') +
            '</div>';
     }
 
-    /* A planned bonus for today replaces the five generic ones: the point of
-       Sophie planning it is that there is one answer, not a menu. */
-    var bonusChoices = {};
-    if (plannedSession(state.day, "bonus")) bonusChoices[planBonusId()] = { label: "Planned bonus" };
-    else bonusChoices = window.BONUS;
-    h += '<div class="prow bonusrow"><span class="plabel">Bonus</span>' +
-         Object.keys(bonusChoices).map(function(id){
-           var b = bonusChoices[id];
-           var did = (state.week && state.week.bonus || []).some(function(x){ return x.id === id; });
-           return '<button data-b="' + id + '"' +
-                  (isBonus() && state.bonusId === id ? ' class="sel"' : '') + '>' +
-                  esc(b.label) + (did ? ' <span class="pmark">✓</span>' : '') + '</button>';
-         }).join("") + '</div>';
+    var pool = poolNow();
+    if (pool && (pool.total || state.mode === "pool")){
+      h += '<div class="prow"><span class="plabel">Pool</span>' +
+           '<button class="' + (state.mode === "pool" ? 'sel' : '') + '" data-mode="pool">' +
+             (pool.total ? pool.total + ' set' + (pool.total === 1 ? '' : 's') + ' to catch up' : 'Empty ✓') + '</button></div>';
+    }
+
+    if (pool && !pool.total){
+      var choices = bonusChoices();
+      h += '<div class="prow bonusrow"><span class="plabel">Bonus</span>' +
+           Object.keys(choices).map(function(id){
+             var did = (state.week && state.week.bonus || []).some(function(x){ return x.id === id; });
+             return '<button data-b="' + id + '"' + (isBonus() && state.bonusId === id ? ' class="sel"' : '') + '>' +
+                    esc(choices[id].label) + (did ? ' <span class="pmark">✓</span>' : '') + '</button>';
+           }).join("") + '</div>';
+    } else {
+      h += '<div class="prow"><span class="plabel">Bonus</span><span class="pmark" style="font-size:13px">' +
+           (pool ? 'unlocks once the pool is empty' : 'waiting for this week&rsquo;s sets to load') + '</span>' +
+           // A bonus already under way stays reachable, so its sets can be corrected.
+           (isBonus() ? '<button class="sel" data-b="' + esc(state.bonusId) + '">In progress</button>' : '') +
+           '</div>';
+    }
 
     p.innerHTML = h;
     p.querySelectorAll("button").forEach(function(b){
       b.onclick = function(){
-        if (b.dataset.core) { state.mode = "core"; state.bonusId = null; }
-        else { state.mode = "bonus"; state.bonusId = b.dataset.b; }
-        buildPicker();
-        render();
-        fetchLast().then(render);
+        if (b.dataset.b) choose("bonus", b.dataset.b);
+        else choose(b.dataset.mode, null);
       };
     });
+  }
+
+  // Where the page opens when nothing has been chosen yet: today's session if
+  // there is one, otherwise the pool if it has anything in it.
+  function defaultMode(){
+    if (state.chosen) return;
+    if (coreFor(state.day)) { state.mode = "core"; return; }
+    var pool = poolNow();
+    state.mode = pool && pool.total ? "pool" : "core";
   }
 
   // ---------- boot ----------
   state.day = window.DAY_KEYS[new Date().getDay()];
   loadLocal();
+  (function(){
+    var w = read(WEEK, null);
+    if (w && w.rows) state.week = w;
+  })();
 
-  // Follow whatever session is already in progress today, core or bonus, so a
-  // reload mid-session lands back where you were rather than on the default.
+  // Follow whatever session is already in progress today, so a reload
+  // mid-session lands back where you were rather than on the default.
   var lastSet = state.sets[state.sets.length - 1];
-  if (lastSet && lastSet.day && String(lastSet.day).indexOf("bonus:") === 0) {
-    state.mode = "bonus";
-    state.bonusId = String(lastSet.day).slice(6);
+  if (lastSet && lastSet.day) {
+    var ld = String(lastSet.day);
+    if (ld.indexOf("bonus:") === 0) { state.mode = "bonus"; state.bonusId = ld.slice(6); state.chosen = true; }
+    else if (ld === "pool" || ld === "pt") { state.mode = ld; state.chosen = true; }
   }
+  defaultMode();
 
   buildPicker();
   tick();
@@ -980,18 +1247,10 @@
   render();
   flush();
 
-  // The week status decides whether the core shows as outstanding and whether
-  // the weekend session is still on offer, so the picker is rebuilt once it lands.
+  // The week's sets decide the pool, the tally and whether today's session
+  // shows as done, so the picker is rebuilt once they land.
   fetchWeek().then(function(){
-    // On Sunday with Saturday already done, open on a bonus rather than on a
-    // session that is finished.
-    if (!isBonus() && !setsToday()) {
-      var s = coreFor(state.day);
-      if (s && s.floats && weekendDone()) {
-        state.mode = "bonus";
-        state.bonusId = plannedSession(state.day, "bonus") ? planBonusId() : "b1";
-      }
-    }
+    defaultMode();
     buildPicker();
     render();
     return fetchLast();

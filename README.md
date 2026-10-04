@@ -9,7 +9,8 @@ machine. History now lives server-side in D1 and is readable from any device.
 
 ## What it does
 
-- Opens straight onto today's session. Three exercises, no navigation to reach them.
+- Opens straight onto today's session — up to three blocks — with the pool of missed
+  work above it and the week's volume per muscle below. No navigation to reach them.
 - Shows last session's numbers per lift and prefills reps/weight from them.
 - One tap logs a set. Rest timer starts automatically.
 - **Offline-first.** Sets are written to `localStorage` the instant you tap, then
@@ -32,10 +33,34 @@ machine. History now lives server-side in D1 and is readable from any device.
   hatched, read live from his Google **Travel** calendar. Dates only — no trip
   names, places or flight details reach the page.
 
-**Where the programme lives.** A locked planner slot (D1, `plan_slots`) wins. Any
-day or slot with nothing locked falls back to `public/programme.js`, which is also
-the seed for the exercise library. So the planner can be filled in a day at a time
-without the Log ever going blank.
+**Where the programme lives.** `public/programme.js` — days, blocks, sets, rep
+ranges, kit, form cues, muscle credit and weekly targets are all data there; the
+page hard-codes none of it. Edit that file and deploy to change the programme.
+Since 3 Oct 2026 **Mon–Fri always come from programme.js**, whatever is locked in
+the Planner for those mornings (a slot locked under the old programme cannot hide
+the new one; nothing in `plan_slots` was deleted). The Planner's Sat/Sun morning
+slots and every bonus slot still work as before.
+
+**Blocks.** A session is at most three blocks; a block is one lift (straight sets)
+or a superset of two, alternated set by set. The card for the lift to do next is
+marked, and the rest timer after a superset set is short and names the other lift.
+An optional warm-up sits above block 1, outside the cap, and earns no volume.
+
+**The pool.** Any planned set not logged by the end of its day (midnight
+Europe/London) goes into the pool, shown at the top of the Log. Working it off
+is an ordinary session ("Work the pool"), logged under `day = 'pool'`; each set
+pays off the oldest missed set of that lift. The week is Mon–Sun on the London
+clock, so the pool clears Sunday 23:59 and Monday starts clean. Bonus work is only
+offered once the pool is empty. On Wednesday, a "PT with Sophie" session (logged
+under `day = 'pt'`, lifts added as you go) replaces leg day and keeps the squats
+and deadlifts out of the pool. Nothing about the pool is stored: it is worked out
+from the week's sets (`public/week.js`, fed by `/api/week-status`), so it cannot
+drift from them. `npm test` checks it against the real programme.
+
+**Weekly tally.** Sets per muscle this week against target, at the foot of the
+Log: direct sets count 1, indirect ½, as set per lift in programme.js. Lifts the
+programme does not describe (PT, old bonus sessions) count by their library
+muscle group; "Shoulders" is not counted, since it cannot say side from rear delt.
 
 ### The Travel calendar feed
 
