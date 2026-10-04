@@ -170,6 +170,29 @@
     });
   }
 
+  // Order the pool's exercises by how far their muscles are from target.
+  // Score = for each muscle the lift works, its credit (1 direct, 0.5
+  // indirect) × the sets still needed to reach the TOP of that muscle's weekly
+  // range (never below zero; untargeted muscles score nothing), summed.
+  // Highest first; a tie keeps the pool's own order (oldest day first).
+  // `rows` is the week's logged sets the tally is worked out from.
+  function rankPool(prog, exercises, rows, lib) {
+    var left = {};
+    tally(prog, rows, lib).forEach(function (t) {
+      left[t.muscle] = t.max == null ? 0 : Math.max(0, t.max - t.sets);
+    });
+    function score(name) {
+      var e = prog.exercises[name] || {}, s = 0;
+      (e.direct || []).forEach(function (m) { s += 1 * (left[m] || 0); });
+      (e.indirect || []).forEach(function (m) { s += 0.5 * (left[m] || 0); });
+      return s;
+    }
+    return exercises
+      .map(function (x, i) { return { x: x, i: i, s: score(x.exercise) }; })
+      .sort(function (a, b) { return b.s - a.s || a.i - b.i; })
+      .map(function (o) { return o.x; });
+  }
+
   // A programme day (or bonus) as the page renders it: blocks of exercise
   // entries carrying everything a card needs.
   function expand(prog, blocks) {
@@ -198,7 +221,7 @@
 
   var api = {
     todayIn: todayIn, weekDates: weekDates, mergeRows: mergeRows,
-    computePool: computePool, tally: tally, expand: expand, plannedFor: plannedFor
+    computePool: computePool, tally: tally, rankPool: rankPool, expand: expand, plannedFor: plannedFor
   };
   root.IronWeek = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
