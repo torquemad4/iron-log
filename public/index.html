@@ -657,15 +657,21 @@
   function poolNow(){ return weekKnown() ? W.computePool(P, weekRows(), londonToday()) : null; }
   // The pool as it stood before today's pool work, so a pool session keeps its
   // shape — sets already worked off today show as done rather than vanishing.
+  function poolAtStartRows(){
+    return weekRows().filter(function(r){ return !(r.day === "pool" && r.date === state.date); });
+  }
   function poolAtStart(){
     if (!weekKnown()) return null;
-    var rows = weekRows().filter(function(r){ return !(r.day === "pool" && r.date === state.date); });
-    return W.computePool(P, rows, londonToday());
+    return W.computePool(P, poolAtStartRows(), londonToday());
   }
   function poolSession(){
     var start = poolAtStart();
     if (!start) return null;
-    var exs = start.exercises.map(function(p){
+    /* Muscles furthest from the top of their weekly range first. Ranked on the
+       week as it stood before today's pool work, like the pool itself, so the
+       cards don't reshuffle while you work through them. */
+    var ranked = W.rankPool(P, start.exercises, poolAtStartRows(), state.lib);
+    var exs = ranked.map(function(p){
       var e = fromLibrary(p.exercise, p.remaining, p.reps);
       e.kit = p.kit; e.from = p.from;
       return e;

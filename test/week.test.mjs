@@ -103,3 +103,22 @@ test("every lift that can land in the pool works at least one tallied muscle", (
     assert.ok((e.direct || []).length + (e.indirect || []).length > 0, s.ex);
   }
 });
+
+test("the catch-up pool lists lifts for the muscles furthest from target first", () => {
+  // Wednesday onwards with nothing logged: Mon + Tue in the pool, tally all zero.
+  const pool = W.computePool(P, [], D.wed);
+  const ranked = W.rankPool(P, pool.exercises, [], []).map(x => x.exercise);
+  // Scores (top of range): Skull Crusher 16 · Barbell Shrug 16 · DB Curl 16 ·
+  // Barbell Bicep Curl 16 · Floor Press 10 + 0.5×16 = 18 · Lateral 10 · Rear Delt 8.
+  assert.deepEqual(ranked, ["Close-Grip Floor Press", "DB Curl", "Skull Crusher", "Barbell Shrug",
+                            "Barbell Bicep Curl", "One-Arm DB Lateral Raise", "Rear Delt Flye"]);
+});
+
+test("a muscle already at the top of its range scores nothing", () => {
+  const rows = [{ day: "mon", date: D.mon, exercise: "Rear Delt Flye", sets: 8 }];
+  const ex = [{ exercise: "Rear Delt Flye" }, { exercise: "DB Curl" }];
+  assert.deepEqual(W.rankPool(P, ex, rows, []).map(x => x.exercise), ["DB Curl", "Rear Delt Flye"]);
+  const full = [{ day: "mon", date: D.mon, exercise: "DB Curl", sets: 16 }, ...rows];
+  // Both zero: the pool's own order stands.
+  assert.deepEqual(W.rankPool(P, ex, full, []).map(x => x.exercise), ["Rear Delt Flye", "DB Curl"]);
+});
