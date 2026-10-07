@@ -45,6 +45,29 @@
     "Neutral-Grip DB Overhead Press": { rest: 90,  step: 2, cues: ["rotate", "lockout"],    indirect: ["Triceps", "Side delts"] },
     "Barbell Back Squat":             { rest: 150, step: 2.5,                               direct: ["Legs"] },
     "Barbell Deadlift":               { rest: 180, step: 5,                                 direct: ["Legs"], indirect: ["Traps"] },
+    // Alternatives — for when the kit isn't there (a hotel, say). Logged under
+    // their own names, credited for what they actually work.
+    "Close-Grip Push-Up":             { rest: 60,  step: 1, cues: ["rotate", "lockout"],    direct: ["Chest"], indirect: ["Triceps"] },
+    "Diamond Push Up":                { rest: 60,  step: 1, cues: ["lockout"],              direct: ["Triceps"], indirect: ["Chest"] },
+    "Bench Dip":                      { rest: 60,  step: 1, cues: ["lockout"],              direct: ["Triceps"] },
+    "Band Overhead Triceps Extension":{ rest: 60,  band: true, cues: ["lockout"],           direct: ["Triceps"] },
+    "Backpack Curl":                  { rest: 60,  step: 1,                                 direct: ["Biceps"] },
+    "Band Curl":                      { rest: 60,  band: true,                              direct: ["Biceps"] },
+    "Towel Isometric Curl":           { rest: 45,  step: 1, note: "Stand on a towel, pull up hard for the reps' worth of seconds — log seconds as reps.", direct: ["Biceps"] },
+    "Backpack Shrug":                 { rest: 60,  step: 1,                                 direct: ["Traps"] },
+    "Suitcase Shrug":                 { rest: 60,  step: 1, note: "A loaded bag in each hand.", direct: ["Traps"] },
+    "Band Lateral Raise":             { rest: 60,  band: true, side: true, cues: ["rotate", "lateral"], direct: ["Side delts"] },
+    "Water-Bottle Lateral Raise":     { rest: 60,  step: 0.5, side: true, cues: ["rotate", "lateral"], direct: ["Side delts"] },
+    "Prone Y-T Raise":                { rest: 45,  step: 1, note: "Face down on the floor or bed edge, thumbs up.", direct: ["Rear delts"] },
+    "Band Reverse Fly":               { rest: 45,  band: true,                              direct: ["Rear delts"] },
+    "Inverted Table Row":             { rest: 75,  step: 1, note: "Under a sturdy table, heels on the floor. Check it holds you first.", direct: ["Back"], indirect: ["Biceps", "Traps"] },
+    "Backpack Row":                   { rest: 75,  step: 1, side: true,                     direct: ["Back"], indirect: ["Biceps", "Traps"] },
+    "Door-Anchor Band Row":           { rest: 75,  band: true,                              direct: ["Back"], indirect: ["Biceps", "Traps"] },
+    "Pike Push-Up":                   { rest: 75,  step: 1, cues: ["rotate", "lockout"],    indirect: ["Triceps", "Side delts"] },
+    "Backpack Overhead Press":        { rest: 75,  step: 1, cues: ["rotate", "lockout"],    indirect: ["Triceps", "Side delts"] },
+    "Bulgarian Split Squat":          { rest: 90,  step: 1, side: true,                     direct: ["Legs"] },
+    "Backpack Goblet Squat":          { rest: 90,  step: 1,                                 direct: ["Legs"] },
+    "Single-Leg RDL":                 { rest: 75,  step: 1, side: true,                     direct: ["Legs"] },
     // Warm-up only. No volume credit: two light sets are not working sets.
     "Band Pull-Apart":                { rest: 30,  band: true, note: "Palms up." },
     "Side-Lying DB External Rotation":{ rest: 30,  step: 1, side: true }
@@ -113,6 +136,27 @@
     ]
   };
 
+  // ------------------------------------------------------------ ALTERNATIVES
+  // Swaps offered on a pool card ("Alternatives") when the kit isn't there.
+  // A set of the swap pays off one set of the original in the pool, and earns
+  // the swap's own muscle credit in the tally. reps: only where the swap needs
+  // a different range from the original; otherwise the original's applies.
+  var ALTERNATIVES = {
+    "Close-Grip Floor Press":   [x("Close-Grip Push-Up", 0, "8-20", "floor"), x("Diamond Push Up", 0, "6-15", "floor")],
+    "Skull Crusher":            [x("Bench Dip", 0, "10-20", "chair or bed"), x("Diamond Push Up", 0, "6-15", "floor"), x("Band Overhead Triceps Extension", 0, null, "band")],
+    "DB Curl":                  [x("Backpack Curl", 0, null, "loaded backpack"), x("Band Curl", 0, null, "band"), x("Towel Isometric Curl", 0, "10-20", "towel")],
+    "Barbell Bicep Curl":       [x("Backpack Curl", 0, null, "loaded backpack"), x("Band Curl", 0, null, "band"), x("Towel Isometric Curl", 0, "10-20", "towel")],
+    "Hammer Curl":              [x("Backpack Curl", 0, null, "loaded backpack"), x("Band Curl", 0, null, "band")],
+    "Barbell Shrug":            [x("Backpack Shrug", 0, "15-25", "loaded backpack"), x("Suitcase Shrug", 0, "15-25", "two bags")],
+    "One-Arm DB Lateral Raise": [x("Water-Bottle Lateral Raise", 0, "15-25", "water bottle"), x("Band Lateral Raise", 0, null, "band")],
+    "Rear Delt Flye":           [x("Prone Y-T Raise", 0, "10-20", "floor"), x("Band Reverse Fly", 0, null, "band")],
+    "Single-Arm DB Row":        [x("Inverted Table Row", 0, "8-15", "sturdy table"), x("Backpack Row", 0, null, "loaded backpack"), x("Door-Anchor Band Row", 0, null, "band + door")],
+    "Banded Lat Pulldown":      [x("Inverted Table Row", 0, "8-15", "sturdy table"), x("Door-Anchor Band Row", 0, null, "band + door")],
+    "Neutral-Grip DB Overhead Press": [x("Pike Push-Up", 0, "6-12", "floor"), x("Backpack Overhead Press", 0, null, "loaded backpack")],
+    "Barbell Back Squat":       [x("Bulgarian Split Squat", 0, "8-15", "chair or bed"), x("Backpack Goblet Squat", 0, "12-20", "loaded backpack")],
+    "Barbell Deadlift":         [x("Single-Leg RDL", 0, "8-15", "backpack optional")]
+  };
+
   // ------------------------------------------------------------ BONUS
   // Extra work on a good day. Offered ONLY once the pool is empty. Aimed at the
   // muscles the plan leaves at the bottom of their range: chest, rear delts, back.
@@ -157,6 +201,7 @@
     supersetRest: SUPERSET_REST,
     days: DAYS,
     warmup: WARMUP,
+    alternatives: ALTERNATIVES,
     bonus: BONUS,
     targets: TARGETS,
     libraryMuscle: LIBRARY_MUSCLE,

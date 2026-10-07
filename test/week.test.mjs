@@ -122,3 +122,24 @@ test("a muscle already at the top of its range scores nothing", () => {
   // Both zero: the pool's own order stands.
   assert.deepEqual(W.rankPool(P, ex, full, []).map(x => x.exercise), ["Rear Delt Flye", "DB Curl"]);
 });
+
+test("a swap logged for a pooled lift pays it off, and earns its own muscle credit", () => {
+  const rows = [...dayRows("mon").filter(r => r.exercise !== "Close-Grip Floor Press"),
+                { day: "pool:Close-Grip Floor Press", date: D.tue, exercise: "Close-Grip Push-Up", sets: 3 }];
+  const p = W.computePool(P, rows, D.tue);
+  assert.deepEqual(p.items.map(i => [i.exercise, i.remaining]), [["Close-Grip Floor Press", 1]]);
+  const t = Object.fromEntries(W.tally(P, rows.filter(r => r.day.startsWith("pool")), []).map(r => [r.muscle, r.sets]));
+  assert.equal(t.Chest, 3);
+  assert.equal(t.Triceps, 1.5);
+});
+
+test("every alternative is described, so it earns credit and gets its cues", () => {
+  for (const [orig, alts] of Object.entries(P.alternatives)) {
+    assert.ok(P.exercises[orig], orig);
+    for (const a of alts) {
+      const e = P.exercises[a.ex];
+      assert.ok(e, a.ex);
+      assert.ok((e.direct || []).length + (e.indirect || []).length > 0, a.ex);
+    }
+  }
+});
