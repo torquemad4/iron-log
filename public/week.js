@@ -8,7 +8,9 @@
 //   - A planned set not logged by the end of its planned day goes into it.
 //     "End of day" is midnight Europe/London, whatever the phone's clock says.
 //   - Pool work is logged under day = "pool" and pays off the oldest missed
-//     sets of that exercise first.
+//     sets of that exercise first. A swap done instead (Alternatives — a hotel
+//     with no barbell) is logged under its own name with day = "pool:<the
+//     lift it replaces>", and pays off that lift.
 //   - The week is Mon–Sun on the London clock, so the pool clears at Sunday
 //     23:59 Europe/London: unfinished items drop off and Monday starts clean.
 //   - Wednesday is satisfied by a PT session (any set logged under day = "pt"
@@ -72,6 +74,15 @@
     return n;
   }
 
+  // Pool work: day "pool" (the lift itself) or "pool:<lift>" (a swap for it).
+  function isPoolDay(day) { return day === "pool" || String(day).indexOf("pool:") === 0; }
+  // Which pooled lift a logged row pays off (lower-cased), or null.
+  function poolTarget(r) {
+    if (r.day === "pool") return key(r.exercise);
+    if (String(r.day).indexOf("pool:") === 0) return key(String(r.day).slice(5));
+    return null;
+  }
+
   // planned sets per exercise for one day, in block order
   function plannedFor(day) {
     var list = [], at = {};
@@ -110,7 +121,8 @@
     // 2. Pool work pays off the oldest first.
     var paid = {};
     rows.forEach(function (r) {
-      if (r.day === "pool") paid[key(r.exercise)] = (paid[key(r.exercise)] || 0) + (Number(r.sets) || 0);
+      var k = poolTarget(r);
+      if (k) paid[k] = (paid[k] || 0) + (Number(r.sets) || 0);
     });
     missed.forEach(function (m) {
       var k = key(m.exercise), take = Math.min(paid[k] || 0, m.remaining);
@@ -221,7 +233,7 @@
 
   var api = {
     todayIn: todayIn, weekDates: weekDates, mergeRows: mergeRows,
-    computePool: computePool, tally: tally, rankPool: rankPool, expand: expand, plannedFor: plannedFor
+    computePool: computePool, tally: tally, rankPool: rankPool, isPoolDay: isPoolDay, expand: expand, plannedFor: plannedFor
   };
   root.IronWeek = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

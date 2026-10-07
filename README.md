@@ -57,6 +57,13 @@ and deadlifts out of the pool. Nothing about the pool is stored: it is worked ou
 from the week's sets (`public/week.js`, fed by `/api/week-status`), so it cannot
 drift from them. `npm test` checks it against the real programme.
 
+**Alternatives.** Every card in a pool session has an "Alternatives" button: a
+short list of swaps that need no barbell (floor, chair, loaded backpack, band),
+kept in `programme.js` under `alternatives`, plus "something else" for anything in
+the library or typed in. A swap is logged under its own name with
+`day = 'pool:<the lift it replaces>'`, so each set still comes off that lift's pool
+entry while the tally credits the muscles the swap actually works.
+
 **Weekly tally.** Sets per muscle this week against target, at the foot of the
 Log: direct sets count 1, indirect ½, as set per lift in programme.js. Lifts the
 programme does not describe (PT, old bonus sessions) count by their library

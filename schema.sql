@@ -115,3 +115,27 @@ INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side, muscl
   ('Barbell Deadlift',                'weighted', 3, '5-8',   180, 5,   0, 'Legs',      'barbell'),
   ('Band Pull-Apart',                 'banded',   2, '15-20', 30,  1,   0, 'Shoulders', 'band'),
   ('Side-Lying DB External Rotation', 'weighted', 2, '12-15', 30,  1,   1, 'Shoulders', 'dumbbell');
+
+-- Alternatives offered on a pool card when the kit isn't there (a hotel).
+-- (Diamond Push Up is already in the library from Trainerize.)
+INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side, muscle, equipment) VALUES
+  ('Close-Grip Push-Up',              'weighted', 3, '8-20',  60, 1,   0, 'Chest',     'bodyweight'),
+  ('Bench Dip',                       'weighted', 3, '10-20', 60, 1,   0, 'Triceps',   'bodyweight'),
+  ('Band Overhead Triceps Extension', 'banded',   3, '8-12',  60, 1,   0, 'Triceps',   'band'),
+  ('Backpack Curl',                   'weighted', 3, '8-12',  60, 1,   0, 'Biceps',    'other'),
+  ('Band Curl',                       'banded',   3, '10-15', 60, 1,   0, 'Biceps',    'band'),
+  ('Towel Isometric Curl',            'weighted', 3, '10-20', 45, 1,   0, 'Biceps',    'bodyweight'),
+  ('Backpack Shrug',                  'weighted', 3, '15-25', 60, 1,   0, 'Traps',     'other'),
+  ('Suitcase Shrug',                  'weighted', 3, '15-25', 60, 1,   0, 'Traps',     'other'),
+  ('Band Lateral Raise',              'banded',   3, '12-20', 60, 1,   1, 'Shoulders', 'band'),
+  ('Water-Bottle Lateral Raise',      'weighted', 3, '15-25', 60, 0.5, 1, 'Shoulders', 'other'),
+  ('Prone Y-T Raise',                 'weighted', 3, '10-20', 45, 1,   0, 'Shoulders', 'bodyweight'),
+  ('Band Reverse Fly',                'banded',   3, '12-20', 45, 1,   0, 'Shoulders', 'band'),
+  ('Inverted Table Row',              'weighted', 3, '8-15',  75, 1,   0, 'Back',      'bodyweight'),
+  ('Backpack Row',                    'weighted', 3, '8-12',  75, 1,   1, 'Back',      'other'),
+  ('Door-Anchor Band Row',            'banded',   3, '10-15', 75, 1,   0, 'Back',      'band'),
+  ('Pike Push-Up',                    'weighted', 3, '6-12',  75, 1,   0, 'Shoulders', 'bodyweight'),
+  ('Backpack Overhead Press',         'weighted', 3, '8-12',  75, 1,   0, 'Shoulders', 'other'),
+  ('Bulgarian Split Squat',           'weighted', 3, '8-15',  90, 1,   1, 'Legs',      'bodyweight'),
+  ('Backpack Goblet Squat',           'weighted', 3, '12-20', 90, 1,   0, 'Legs',      'other'),
+  ('Single-Leg RDL',                  'weighted', 3, '8-15',  75, 1,   1, 'Legs',      'bodyweight');

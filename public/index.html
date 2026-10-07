@@ -44,7 +44,8 @@
   .pmark{opacity:.7;font-weight:400}
   .card.outstanding{border-left:3px solid var(--warn);background:var(--panel-2);
     font-size:14px;line-height:1.5}
-  .exhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .exhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
+  .exhead .exname{flex:1 1 170px}
   .formlink{
     flex:none;font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;
     border:1px solid var(--line);border-radius:8px;padding:6px 10px;white-space:nowrap;
@@ -213,6 +214,9 @@
   details.warm summary{cursor:pointer; color:var(--muted); font-size:14px; font-weight:700;
     padding:10px 0; min-height:44px}
   .poolcard{border-left:3px solid var(--warn)}
+  .swapnote{color:var(--warn)}
+  #altBody .li small{max-width:40%; white-space:normal; text-align:right}
+  #altBody .mtags .tag:first-child{margin-left:0}
   .plist{margin:0; padding:0; list-style:none; font-size:14px}
   .plist li{padding:3px 0}
   .plist li.pday{padding-top:8px}
@@ -283,6 +287,19 @@
     <button id="exCancel">Cancel</button>
     <button id="exSave" class="primary">Add to library</button>
   </div>
+</dialog>
+
+<dialog id="altDlg">
+  <h3 id="altTitle">Alternatives</h3>
+  <p class="note" style="margin-top:-6px">Each set comes off this lift&rsquo;s pool, and counts in the tally for the muscles it works.</p>
+  <div class="lib" id="altBody"></div>
+  <label for="altOther">Something else</label>
+  <div class="addrow" style="margin-top:0">
+    <input id="altOther" list="altLib" placeholder="Any exercise" autocomplete="off" style="flex:1;min-width:0">
+    <datalist id="altLib"></datalist>
+    <button id="altUse">Use</button>
+  </div>
+  <div class="acts"><button id="altClose">Cancel</button></div>
 </dialog>
 
 <dialog id="rmDlg">
@@ -658,7 +675,7 @@
   // The pool as it stood before today's pool work, so a pool session keeps its
   // shape — sets already worked off today show as done rather than vanishing.
   function poolAtStartRows(){
-    return weekRows().filter(function(r){ return !(r.day === "pool" && r.date === state.date); });
+    return weekRows().filter(function(r){ return !(W.isPoolDay(r.day) && r.date === state.date); });
   }
   function poolAtStart(){
     if (!weekKnown()) return null;
@@ -671,18 +688,51 @@
        week as it stood before today's pool work, like the pool itself, so the
        cards don't reshuffle while you work through them. */
     var ranked = W.rankPool(P, start.exercises, poolAtStartRows(), state.lib);
-    var exs = ranked.map(function(p){
-      var e = fromLibrary(p.exercise, p.remaining, p.reps);
-      e.kit = p.kit; e.from = p.from;
-      return e;
-    });
+    var exs = ranked.map(function(p){ return poolCard(p.exercise, p.remaining, p.reps, p.kit, p.from); });
     // Anything worked off today that is no longer in the starting pool (a
     // second device, say) still shows, so its sets can be corrected.
     state.sets.forEach(function(s){
-      if (s.day === "pool" && !exs.some(function(e){ return lc(e.name) === lc(s.exercise); }))
-        exs.push(fromLibrary(s.exercise, 0));
+      var orig = s.day === "pool" ? s.exercise : (String(s.day).indexOf("pool:") === 0 ? String(s.day).slice(5) : null);
+      if (orig && !exs.some(function(e){ return lc(e.poolOf) === lc(orig); }))
+        exs.push(poolCard(orig, 0));
     });
     return straight("Pool — catch-up", exs, { pool: true });
+  }
+
+  // ---------- alternatives (pool only) ----------
+  /* No barbell at the hotel: a pool card can be swapped for something that
+     can be done there. The swap is logged under its own name — the history
+     says what was actually done — with day = "pool:<the lift it replaces>", so
+     each set still comes off that lift's pool entry (week.js). The choice is
+     remembered on this device for today; on another device it is picked up
+     from the sets already logged. */
+  var SWAPS = "ironlog.swaps.v1";
+  function swaps(){ var w = read(SWAPS, null); return (w && w.date === state.date) ? w.map : {}; }
+  function setSwap(orig, name){
+    var m = swaps(); m[lc(orig)] = name;
+    write(SWAPS, { date: state.date, map: m });
+  }
+  function swapFor(orig){
+    var m = swaps();
+    if (m[lc(orig)]) return lc(m[lc(orig)]) === lc(orig) ? null : m[lc(orig)];
+    var last = null;
+    state.sets.forEach(function(s){ if (s.day === "pool:" + orig) last = s.exercise; });
+    return last;
+  }
+  function altsFor(orig){ return P.alternatives[orig] || []; }
+  function poolCard(orig, sets, reps, kit, from){
+    var alt = swapFor(orig), e;
+    if (alt){
+      var a = altsFor(orig).filter(function(x){ return lc(x.ex) === lc(alt); })[0] || {};
+      e = fromLibrary(alt, sets, a.reps || reps);
+      e.kit = a.kit || null;
+      e.swapped = true;
+    } else {
+      e = fromLibrary(orig, sets, reps);
+      e.kit = kit || null;
+    }
+    e.poolOf = orig; e.from = from;
+    return e;
   }
 
   var PT = "ironlog.pt.v1";            // today's PT exercise list, this device
@@ -729,6 +779,20 @@
     return weekRows().some(function(r){ return r.day === "pt" && r.sets > 0; });
   }
 
+  // A card's sets. A pool card counts the lift itself AND any swap done for it
+  // today, so switching to an alternative halfway keeps the count going.
+  function setsForEx(ex){
+    if (!ex.poolOf) return setsFor(ex.name);
+    return state.sets.filter(function(s){
+      return (s.day === "pool" && lc(s.exercise) === lc(ex.poolOf)) || s.day === "pool:" + ex.poolOf;
+    });
+  }
+  // The `day` a set on this card is logged under.
+  function dayFor(ex){
+    if (!ex.poolOf) return logDay();
+    return lc(ex.name) === lc(ex.poolOf) ? "pool" : "pool:" + ex.poolOf;
+  }
+
   function setsFor(name){
     // Scoped to the session in view: the same lift can appear in today's
     // session AND in pool work later the same day, and they are different sets.
@@ -740,7 +804,7 @@
   function nextInBlock(b){
     var best = null, bestN = Infinity;
     b.exercises.forEach(function(e){
-      var n = setsFor(e.name).length;
+      var n = setsForEx(e).length;
       if (n < e.sets && n < bestN){ best = e; bestN = n; }
     });
     return best;
@@ -754,6 +818,8 @@
     var e = P.exercises[name] || {};
     var t = (e.direct || []).map(function(m){ return m + " x1"; })
       .concat((e.indirect || []).map(function(m){ return m + " x0.5"; }));
+    // Not in the programme (an "Other" swap): its library muscle group, as the tally counts it.
+    if (!t.length){ var l = libEntry(name), m = l && P.libraryMuscle[l.muscle]; if (m) t = [m + " x1"]; }
     return t.length ? '<span class="mtags">' + t.map(function(x){ return '<span class="tag">' + esc(x) + '</span>'; }).join("") + '</span>' : '';
   }
 
@@ -794,7 +860,7 @@
   }
 
   function cardHTML(ex, isNext, i){
-    var done = setsFor(ex.name);
+    var done = setsForEx(ex);
     var last = state.last[ex.name];
     var complete = ex.sets > 0 && done.length >= ex.sets;
     var prefill = suggest(ex, last, done);
@@ -802,6 +868,7 @@
       '<div class="exhead">' +
         '<p class="exname">' + esc(ex.name) + (isNext ? ' <span class="nexttag">Next</span>' : '') + '</p>' +
         '<span style="display:flex;gap:6px">' +
+          (ex.poolOf ? '<button type="button" class="formlink" style="background:none;cursor:pointer" data-alt="' + esc(ex.poolOf) + '">Alternatives</button>' : '') +
           '<button type="button" class="formlink" style="background:none;cursor:pointer" data-rm="' + esc(ex.name) + '">Maxes</button>' +
           '<a class="formlink" href="' + formLink(ex.name) + '" target="_blank" rel="noopener noreferrer">Form &#8599;</a>' +
         '</span>' +
@@ -809,6 +876,7 @@
       '<div class="target">' + (ex.sets ? ex.sets + ' × ' : '') + esc(ex.reps) + ' reps' + (ex.side ? " per side" : "") + ' · ' + ex.rest + 's rest' +
         (ex.kit ? ' <span class="tag">' + esc(ex.kit) + '</span>' : '') +
         (ex.suggested != null ? ' · suggested <b>' + fmtW(ex.suggested) + (ex.band ? ' (band)' : ' kg') + '</b>' : '') + '</div>' +
+      (ex.swapped ? '<div class="target swapnote">Instead of <b>' + esc(ex.poolOf) + '</b> — counts towards it</div>' : '') +
       (ex.from ? '<div class="target">From ' + ex.from.map(function(f){ return DAY_NAME[f.day] + ' ' + f.sets; }).join(' · ') + '</div>' +
                  '<div class="target">' + muscleTags(ex.name) + '</div>' : '') +
       (ex.cues && ex.cues.length ? '<ul class="cues">' + ex.cues.map(function(c){ return '<li>' + esc(c) + '</li>'; }).join("") + '</ul>' : '') +
@@ -974,6 +1042,9 @@
     document.querySelectorAll("#app [data-rm]").forEach(function(b){
       b.onclick = function(){ window.IronPlanner.showMaxes(b.dataset.rm); };
     });
+    document.querySelectorAll("#app [data-alt]").forEach(function(b){
+      b.onclick = function(){ openAlts(b.dataset.alt); };
+    });
   }
 
   function wireFoot(){
@@ -992,9 +1063,10 @@
       write(STARTED, { date: state.date, at: Date.now() });
     }
 
+    var day = dayFor(ex);
     var rec = {
-      id: uid(), date: state.date, day: logDay(), exercise: ex.name,
-      set_index: setsFor(ex.name).length + 1,
+      id: uid(), date: state.date, day: day, exercise: ex.name,
+      set_index: state.sets.filter(function(s){ return s.exercise === ex.name && s.day === day; }).length + 1,
       reps: reps, weight: weight, ts: new Date().toISOString()
     };
     state.sets.push(rec);
@@ -1007,7 +1079,7 @@
     var blk = !ex.warm && sess.blocks[ex.block];
     if (blk && blk.superset){
       var other = blk.exercises.filter(function(e){ return e !== ex; })[0];
-      if (other && setsFor(other.name).length < other.sets) label = "Next: " + other.name;
+      if (other && setsForEx(other).length < other.sets) label = "Next: " + other.name;
       else rest = (P.exercises[ex.name] || {}).rest || ex.rest;
     }
     buildPicker();
@@ -1102,6 +1174,36 @@
     buildPicker();
     render();
   };
+
+  // ---------- alternatives dialog ----------
+  var altOrig = null;
+  function openAlts(orig){
+    altOrig = orig;
+    var cur = swapFor(orig) || orig;
+    var opts = [{ ex: orig, kit: "original" }].concat(altsFor(orig));
+    document.getElementById("altTitle").textContent = "Instead of " + orig;
+    document.getElementById("altBody").innerHTML = opts.map(function(o){
+      return '<button class="li" data-pick="' + esc(o.ex) + '"><span>' + esc(o.ex) +
+             (lc(o.ex) === lc(cur) ? ' <span class="nexttag">Current</span>' : '') +
+             '<br>' + muscleTags(o.ex) + '</span><small>' + esc(o.kit || "") + '</small></button>';
+    }).join("");
+    document.getElementById("altLib").innerHTML = state.lib.map(function(l){ return '<option value="' + esc(l.name) + '">'; }).join("");
+    document.getElementById("altOther").value = "";
+    document.querySelectorAll("#altBody [data-pick]").forEach(function(b){
+      b.onclick = function(){ pickAlt(b.dataset.pick); };
+    });
+    document.getElementById("altDlg").showModal();
+  }
+  function pickAlt(name){
+    name = String(name || "").trim().replace(/\s+/g, " ");
+    if (!name || !altOrig) return;
+    var l = libEntry(name); if (l) name = l.name;     // the library's spelling, so history joins up
+    setSwap(altOrig, name);
+    document.getElementById("altDlg").close();
+    render(); fetchLast().then(render);
+  }
+  document.getElementById("altUse").onclick = function(){ pickAlt(document.getElementById("altOther").value); };
+  document.getElementById("altClose").onclick = function(){ document.getElementById("altDlg").close(); };
 
   // ---------- end session ----------
   document.getElementById("endCancel").onclick = function(){ document.getElementById("endDlg").close(); };
@@ -1258,7 +1360,7 @@
   if (lastSet && lastSet.day) {
     var ld = String(lastSet.day);
     if (ld.indexOf("bonus:") === 0) { state.mode = "bonus"; state.bonusId = ld.slice(6); state.chosen = true; }
-    else if (ld === "pool" || ld === "pt") { state.mode = ld; state.chosen = true; }
+    else if (ld === "pool" || ld.indexOf("pool:") === 0 || ld === "pt") { state.mode = ld === "pt" ? "pt" : "pool"; state.chosen = true; }
   }
   defaultMode();
 
