@@ -371,8 +371,11 @@
   </div>
 </dialog>
 
-<script src="programme.js"></script>
-<script src="week.js"></script>
+<!-- ?v= : bump it whenever programme.js, week.js or planner.js change, so a
+     phone holding an old cached copy cannot pair it with this page. A blank
+     pool page on 7 Oct 2026 was exactly that: new page, old week.js. -->
+<script src="programme.js?v=2026-10-07b"></script>
+<script src="week.js?v=2026-10-07b"></script>
 <script>
 (function(){
   "use strict";
@@ -584,6 +587,30 @@
      so that a slot locked under the old programme cannot silently hide the new
      one. */
   var P = window.PROGRAMME, W = window.IronWeek;
+
+  /* Self-repair for a stale cache. If the scripts this page loaded are older
+     than the page (a browser holding on to a cached copy), stop before
+     anything renders against them, fetch fresh copies once, and reload. One
+     attempt per tab, so a genuinely broken deploy cannot loop. */
+  var HEALED = "ironlog.healed";
+  if (!P || !W || !P.alternatives || typeof W.isPoolDay !== "function" || typeof W.rankPool !== "function") {
+    var tried = false;
+    try { tried = sessionStorage.getItem(HEALED) === "1"; sessionStorage.setItem(HEALED, "1"); } catch (e) {}
+    if (!tried) {
+      var srcs = [];
+      for (var i = 0; i < document.scripts.length; i++) if (document.scripts[i].src) srcs.push(document.scripts[i].src);
+      srcs.push(location.origin + "/planner.js?v=" + (String(srcs[0] || "").split("?v=")[1] || ""));
+      Promise.all(srcs.map(function(u){
+        return fetch(u, { cache: "reload" }).catch(function(){});
+      })).then(function(){ location.reload(); });
+    } else {
+      document.getElementById("app").innerHTML =
+        '<div class="card outstanding"><b>This page is out of date on this phone.</b> ' +
+        'Close the tab and open gym.torquemada.uk again. Nothing logged is lost.</div>';
+    }
+    return;
+  }
+  try { sessionStorage.removeItem(HEALED); } catch (e) {}
 
   function lc(s){ return String(s).toLowerCase(); }
   function libEntry(name){
@@ -1405,6 +1432,6 @@
   };
 })();
 </script>
-<script src="planner.js"></script>
+<script src="planner.js?v=2026-10-07b"></script>
 </body>
 </html>
