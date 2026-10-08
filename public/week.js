@@ -110,7 +110,10 @@
       if (!day || !(dates[d] < today)) return;          // not planned, or not over yet
       if (day.ptAlternative && ptDone) return;
       plannedFor(day).forEach(function (p) {
-        var done = countWhere(rows, function (r) { return r.day === d && key(r.exercise) === key(p.exercise); });
+        // The lift itself, or a swap done for it that day (day = "mon:<lift>").
+        var done = countWhere(rows, function (r) {
+          return (r.day === d && key(r.exercise) === key(p.exercise)) || key(r.day) === key(d + ":" + p.exercise);
+        });
         if (p.sets > done) {
           missed.push({ day: d, date: dates[d], exercise: p.exercise, reps: p.reps, kit: p.kit,
                         planned: p.sets, missed: p.sets - done, remaining: p.sets - done });

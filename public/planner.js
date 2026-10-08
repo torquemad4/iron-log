@@ -19,6 +19,7 @@
   var SLOT_LABEL = { morning: "Morning", bonus: "Bonus" };
 
   var L = window.IronLog, P = window.PROGRAMME;
+  if (!L) return;             // the Log stopped to repair a stale cache and is reloading
   var esc = L.esc, fmtW = L.fmtW;
   var maxesInfo = null;       // { rows, last } from /api/rep-maxes
   var away = null;            // /api/away: { connected, days: [iso…], error? }

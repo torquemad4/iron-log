@@ -6,7 +6,8 @@
 // same lift would drift apart and progression would quietly break. The last time
 // you did the lift is the last time you did the lift, whatever session it was in.
 //
-// date+day identify the session in progress so it excludes itself: a core
+// date+day identify the session in progress so it excludes itself — including
+// swaps logged in it, which carry day = "<day>:<lift replaced>": a core
 // session earlier today should inform a bonus session this evening, but the
 // sets you just logged should not become your own prefill.
 export async function onRequestGet({ request, env }) {
@@ -23,9 +24,9 @@ export async function onRequestGet({ request, env }) {
       `SELECT exercise, date, day, set_index, reps, weight, ts
          FROM sets
         WHERE exercise IN (${marks})
-          AND NOT (date = ? AND day = ?)
+          AND NOT (date = ? AND (day = ? OR day LIKE ?))
         ORDER BY exercise, ts DESC`
-    ).bind(...names, date, day).all();
+    ).bind(...names, date, day, day + ":%").all();
 
     // For each exercise take the most recent session it appeared in, then every
     // set from that session — the whole session, not just its top set, because

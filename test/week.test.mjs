@@ -143,3 +143,16 @@ test("every alternative is described, so it earns credit and gets its cues", () 
     }
   }
 });
+
+test("a swap done on its planned day counts as that day's set, so nothing pools", () => {
+  const rows = [...dayRows("mon").filter(r => r.exercise !== "Barbell Shrug"),
+                { day: "mon:Barbell Shrug", date: D.mon, exercise: "Backpack Shrug", sets: 4 }];
+  assert.equal(W.computePool(P, rows, D.tue).total, 0);
+  const t = Object.fromEntries(W.tally(P, rows, []).map(r => [r.muscle, r.sets]));
+  assert.equal(t.Traps, 4);
+});
+
+test("every lift on every day has an alternative", () => {
+  for (const [k, d] of Object.entries(P.days)) for (const b of d.blocks) for (const s of b)
+    assert.ok((P.alternatives[s.ex] || []).length, `${k}: ${s.ex}`);
+});

@@ -57,12 +57,19 @@ and deadlifts out of the pool. Nothing about the pool is stored: it is worked ou
 from the week's sets (`public/week.js`, fed by `/api/week-status`), so it cannot
 drift from them. `npm test` checks it against the real programme.
 
-**Alternatives.** Every card in a pool session has an "Alternatives" button: a
-short list of swaps that need no barbell (floor, chair, loaded backpack, band),
-kept in `programme.js` under `alternatives`, plus "something else" for anything in
-the library or typed in. A swap is logged under its own name with
-`day = 'pool:<the lift it replaces>'`, so each set still comes off that lift's pool
-entry while the tally credits the muscles the swap actually works.
+**Alternatives.** Every card in a planned day's session and in a pool session has
+an "Alternatives" button: a short list of swaps that need no barbell (floor,
+chair, loaded backpack, band), kept in `programme.js` under `alternatives`, plus
+"something else" for anything in the library or typed in. A swap is logged under
+its own name with `day = '<base>:<the lift it replaces>'` — `mon:Barbell Shrug`,
+`pool:Skull Crusher` — so it counts as that day's set (and stays out of the pool)
+or comes off that lift's pool entry, while the tally credits the muscles the swap
+actually works.
+
+**Script versions.** `index.html` loads its scripts as `week.js?v=…`. Bump that
+`?v=` whenever `programme.js`, `week.js` or `planner.js` changes, so a phone cannot
+pair a new page with an old cached script (that blanked the pool page on 7 Oct
+2026). If it happens anyway, the page re-fetches the scripts and reloads once.
 
 **Weekly tally.** Sets per muscle this week against target, at the foot of the
 Log: direct sets count 1, indirect ½, as set per lift in programme.js. Lifts the
