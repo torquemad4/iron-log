@@ -291,7 +291,7 @@
 
 <dialog id="altDlg">
   <h3 id="altTitle">Alternatives</h3>
-  <p class="note" style="margin-top:-6px">Each set comes off this lift&rsquo;s pool, and counts in the tally for the muscles it works.</p>
+  <p class="note" style="margin-top:-6px">Each set counts as a set of this lift — it stays out of the pool, or comes off it — and in the tally for the muscles it works.</p>
   <div class="lib" id="altBody"></div>
   <label for="altOther">Something else</label>
   <div class="addrow" style="margin-top:0">
@@ -374,8 +374,8 @@
 <!-- ?v= : bump it whenever programme.js, week.js or planner.js change, so a
      phone holding an old cached copy cannot pair it with this page. A blank
      pool page on 7 Oct 2026 was exactly that: new page, old week.js. -->
-<script src="programme.js?v=2026-10-07b"></script>
-<script src="week.js?v=2026-10-07b"></script>
+<script src="programme.js?v=2026-10-08a"></script>
+<script src="week.js?v=2026-10-08a"></script>
 <script>
 (function(){
   "use strict";
@@ -674,8 +674,12 @@
   }
   function coreFor(day){
     var d = P.days[day];
-    if (d) return withWarmup(fromBlocks(d.label, d.blocks,
-      { core: true, heads: true, minutes: d.minutes, ptAlternative: !!d.ptAlternative }));
+    if (d) {
+      var sess = fromBlocks(d.label, d.blocks,
+        { core: true, heads: true, minutes: d.minutes, ptAlternative: !!d.ptAlternative });
+      sess.blocks.forEach(function(b){ b.exercises.forEach(function(e){ applySwap(e, day, b.superset); }); });
+      return withWarmup(sess);
+    }
     var p = plannedSession(day, "morning");
     if (p) p.core = true;
     return p;
@@ -720,46 +724,53 @@
     // second device, say) still shows, so its sets can be corrected.
     state.sets.forEach(function(s){
       var orig = s.day === "pool" ? s.exercise : (String(s.day).indexOf("pool:") === 0 ? String(s.day).slice(5) : null);
-      if (orig && !exs.some(function(e){ return lc(e.poolOf) === lc(orig); }))
+      if (orig && !exs.some(function(e){ return lc(e.swapOf) === lc(orig); }))
         exs.push(poolCard(orig, 0));
     });
     return straight("Pool — catch-up", exs, { pool: true });
   }
 
-  // ---------- alternatives (pool only) ----------
-  /* No barbell at the hotel: a pool card can be swapped for something that
-     can be done there. The swap is logged under its own name — the history
-     says what was actually done — with day = "pool:<the lift it replaces>", so
-     each set still comes off that lift's pool entry (week.js). The choice is
-     remembered on this device for today; on another device it is picked up
-     from the sets already logged. */
-  var SWAPS = "ironlog.swaps.v1";
+  // ---------- alternatives ----------
+  /* No barbell at the hotel: a card in a planned day's session or in the pool
+     can be swapped for something that can be done there. The swap is logged
+     under its own name — the history says what was actually done — with
+     day = "<base>:<the lift it replaces>", base being the planned day ("mon")
+     or "pool". So a swap on Monday still counts as Monday's set (it stays out
+     of the pool) and a swap in the pool still comes off that lift's pool entry
+     (week.js). The choice is remembered on this device for today; another
+     device picks it up from the sets already logged. */
+  var SWAPS = "ironlog.swaps.v2";
   function swaps(){ var w = read(SWAPS, null); return (w && w.date === state.date) ? w.map : {}; }
-  function setSwap(orig, name){
-    var m = swaps(); m[lc(orig)] = name;
+  function swapKey(base, orig){ return base + "|" + lc(orig); }
+  function setSwap(base, orig, name){
+    var m = swaps(); m[swapKey(base, orig)] = name;
     write(SWAPS, { date: state.date, map: m });
   }
-  function swapFor(orig){
-    var m = swaps();
-    if (m[lc(orig)]) return lc(m[lc(orig)]) === lc(orig) ? null : m[lc(orig)];
+  function swapFor(base, orig){
+    var m = swaps(), k = swapKey(base, orig);
+    if (m[k]) return lc(m[k]) === lc(orig) ? null : m[k];
     var last = null;
-    state.sets.forEach(function(s){ if (s.day === "pool:" + orig) last = s.exercise; });
+    state.sets.forEach(function(s){ if (s.day === base + ":" + orig) last = s.exercise; });
     return last;
   }
   function altsFor(orig){ return P.alternatives[orig] || []; }
-  function poolCard(orig, sets, reps, kit, from){
-    var alt = swapFor(orig), e;
-    if (alt){
-      var a = altsFor(orig).filter(function(x){ return lc(x.ex) === lc(alt); })[0] || {};
-      e = fromLibrary(alt, sets, a.reps || reps);
-      e.kit = a.kit || null;
-      e.swapped = true;
-    } else {
-      e = fromLibrary(orig, sets, reps);
-      e.kit = kit || null;
-    }
-    e.poolOf = orig; e.from = from;
+  // Turn a card into its swap, keeping sets, block and position.
+  function applySwap(e, base, superset){
+    e.swapOf = e.name; e.base = base;
+    var alt = swapFor(base, e.name);
+    if (!alt) return e;
+    var a = altsFor(e.name).filter(function(x){ return lc(x.ex) === lc(alt); })[0] || {};
+    var f = fromLibrary(alt, e.sets, a.reps || e.reps);
+    e.name = f.name; e.reps = f.reps; e.kit = a.kit || null; e.cues = f.cues;
+    e.step = f.step; e.band = f.band; e.side = f.side; e.suggested = null;
+    if (!superset) e.rest = f.rest;
+    e.swapped = true;
     return e;
+  }
+  function poolCard(orig, sets, reps, kit, from){
+    var e = fromLibrary(orig, sets, reps);
+    e.kit = kit || null; e.from = from;
+    return applySwap(e, "pool", false);
   }
 
   var PT = "ironlog.pt.v1";            // today's PT exercise list, this device
@@ -800,7 +811,9 @@
   }
   // Today's planned session has working sets logged (a warm-up alone is not it).
   function coreLogged(){
-    return weekRows().some(function(r){ return r.day === state.day && r.sets > 0 && !isWarm(r.exercise); });
+    return weekRows().some(function(r){
+      return (r.day === state.day || String(r.day).indexOf(state.day + ":") === 0) && r.sets > 0 && !isWarm(r.exercise);
+    });
   }
   function ptLogged(){
     return weekRows().some(function(r){ return r.day === "pt" && r.sets > 0; });
@@ -809,15 +822,15 @@
   // A card's sets. A pool card counts the lift itself AND any swap done for it
   // today, so switching to an alternative halfway keeps the count going.
   function setsForEx(ex){
-    if (!ex.poolOf) return setsFor(ex.name);
+    if (!ex.swapOf) return setsFor(ex.name);
     return state.sets.filter(function(s){
-      return (s.day === "pool" && lc(s.exercise) === lc(ex.poolOf)) || s.day === "pool:" + ex.poolOf;
+      return (s.day === ex.base && lc(s.exercise) === lc(ex.swapOf)) || s.day === ex.base + ":" + ex.swapOf;
     });
   }
   // The `day` a set on this card is logged under.
   function dayFor(ex){
-    if (!ex.poolOf) return logDay();
-    return lc(ex.name) === lc(ex.poolOf) ? "pool" : "pool:" + ex.poolOf;
+    if (!ex.swapOf) return logDay();
+    return lc(ex.name) === lc(ex.swapOf) ? ex.base : ex.base + ":" + ex.swapOf;
   }
 
   function setsFor(name){
@@ -895,7 +908,7 @@
       '<div class="exhead">' +
         '<p class="exname">' + esc(ex.name) + (isNext ? ' <span class="nexttag">Next</span>' : '') + '</p>' +
         '<span style="display:flex;gap:6px">' +
-          (ex.poolOf ? '<button type="button" class="formlink" style="background:none;cursor:pointer" data-alt="' + esc(ex.poolOf) + '">Alternatives</button>' : '') +
+          (ex.swapOf ? '<button type="button" class="formlink" style="background:none;cursor:pointer" data-alt="' + esc(ex.base + "|" + ex.swapOf) + '">Alternatives</button>' : '') +
           '<button type="button" class="formlink" style="background:none;cursor:pointer" data-rm="' + esc(ex.name) + '">Maxes</button>' +
           '<a class="formlink" href="' + formLink(ex.name) + '" target="_blank" rel="noopener noreferrer">Form &#8599;</a>' +
         '</span>' +
@@ -903,7 +916,7 @@
       '<div class="target">' + (ex.sets ? ex.sets + ' × ' : '') + esc(ex.reps) + ' reps' + (ex.side ? " per side" : "") + ' · ' + ex.rest + 's rest' +
         (ex.kit ? ' <span class="tag">' + esc(ex.kit) + '</span>' : '') +
         (ex.suggested != null ? ' · suggested <b>' + fmtW(ex.suggested) + (ex.band ? ' (band)' : ' kg') + '</b>' : '') + '</div>' +
-      (ex.swapped ? '<div class="target swapnote">Instead of <b>' + esc(ex.poolOf) + '</b> — counts towards it</div>' : '') +
+      (ex.swapped ? '<div class="target swapnote">Instead of <b>' + esc(ex.swapOf) + '</b> — counts as it</div>' : '') +
       (ex.from ? '<div class="target">From ' + ex.from.map(function(f){ return DAY_NAME[f.day] + ' ' + f.sets; }).join(' · ') + '</div>' +
                  '<div class="target">' + muscleTags(ex.name) + '</div>' : '') +
       (ex.cues && ex.cues.length ? '<ul class="cues">' + ex.cues.map(function(c){ return '<li>' + esc(c) + '</li>'; }).join("") + '</ul>' : '') +
@@ -1070,7 +1083,7 @@
       b.onclick = function(){ window.IronPlanner.showMaxes(b.dataset.rm); };
     });
     document.querySelectorAll("#app [data-alt]").forEach(function(b){
-      b.onclick = function(){ openAlts(b.dataset.alt); };
+      b.onclick = function(){ var i = b.dataset.alt.indexOf("|"); openAlts(b.dataset.alt.slice(0, i), b.dataset.alt.slice(i + 1)); };
     });
   }
 
@@ -1203,10 +1216,10 @@
   };
 
   // ---------- alternatives dialog ----------
-  var altOrig = null;
-  function openAlts(orig){
-    altOrig = orig;
-    var cur = swapFor(orig) || orig;
+  var altOrig = null, altBase = null;
+  function openAlts(base, orig){
+    altOrig = orig; altBase = base;
+    var cur = swapFor(base, orig) || orig;
     var opts = [{ ex: orig, kit: "original" }].concat(altsFor(orig));
     document.getElementById("altTitle").textContent = "Instead of " + orig;
     document.getElementById("altBody").innerHTML = opts.map(function(o){
@@ -1225,7 +1238,7 @@
     name = String(name || "").trim().replace(/\s+/g, " ");
     if (!name || !altOrig) return;
     var l = libEntry(name); if (l) name = l.name;     // the library's spelling, so history joins up
-    setSwap(altOrig, name);
+    setSwap(altBase, altOrig, name);
     document.getElementById("altDlg").close();
     render(); fetchLast().then(render);
   }
@@ -1432,6 +1445,6 @@
   };
 })();
 </script>
-<script src="planner.js?v=2026-10-07b"></script>
+<script src="planner.js?v=2026-10-08a"></script>
 </body>
 </html>
