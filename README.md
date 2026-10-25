@@ -12,7 +12,7 @@ machine. History now lives server-side in D1 and is readable from any device.
 | Hostname | `gym.torquemada.uk` (also `gym-torquemada.pages.dev`, and every per-deployment hash URL under it) |
 | Cloudflare | Pages project `gym-torquemada` · D1 `ironlog` (`ff1a03ea-1f08-4c1b-8878-59f13e69fdb7`) |
 | Access scope | `ACCESS_EMAILS` in `app.conf`: csainzmartinez@gmail.com and csainzmartinez@pm.me — Karl only, no waiver. mfsecades@gmail.com was also on it, with no waiver, until 25 Oct 2026, when Karl had it removed. Sophie (sophiearay1997@gmail.com) was waived in 27 Sep – 25 Oct 2026 and removed when PT ended. |
-| Schema | `schema.sql` (sets, sessions, exercises, plan_slots, rep_maxes) plus one-off `migrations/` |
+| Schema | `schema.sql` (sets, sessions, exercises, plan_slots, rep_maxes, prompts, prompt_notes) plus one-off `migrations/` |
 
 ---
 
@@ -102,6 +102,38 @@ pair a new page with an old cached script (that blanked the pool page on 7 Oct
 Log: direct sets count 1, indirect ½, as set per lift in programme.js. Lifts the
 programme does not describe (PT, old bonus sessions) count by their library
 muscle group; "Shoulders" is not counted, since it cannot say side from rear delt.
+
+### Think about: prompts and quick notes
+
+A card at the very top of the Log tab reads *"For today's workout, think about:"*
+followed by a prompt and, if it has one, a smaller line of context. Under it is a
+quick-notes box: **Enter saves, Shift+Enter starts a new line**. That suits typing
+between sets on Skunkworks, and the Save note button does the same on a phone.
+Earlier notes on that prompt sit underneath in a collapsed list. Every active
+prompt gets its own card. **No active prompt means no card at all.**
+
+The page has **no UI for creating or retiring prompts.** Cowork does that with plain
+SQL against D1 `ironlog`:
+
+```sql
+-- add a prompt (active by default)
+INSERT INTO prompts (text, context, thread) VALUES ('The question, one or two lines', 'Optional smaller context', 'friends:joe');
+-- retire it
+UPDATE prompts SET active = 0, retired_at = CURRENT_TIMESTAMP WHERE id = 1;
+-- read the notes on it
+SELECT session_id, created_at, text FROM prompt_notes WHERE prompt_id = 1 ORDER BY created_at;
+```
+
+| Table | Columns |
+| --- | --- |
+| `prompts` | `id` INTEGER PK autoincrement · `text` TEXT NOT NULL · `context` TEXT · `thread` TEXT (e.g. `friends:joe`) · `active` INTEGER 0/1, default 1 · `created_at` TEXT, default CURRENT_TIMESTAMP · `retired_at` TEXT |
+| `prompt_notes` | `id` TEXT PK (made by the client, so a retried save is a no-op) · `prompt_id` INTEGER (= `prompts.id`) · `session_id` TEXT, `'<date>:<day>'`, the same pair as the `sessions` key (e.g. `2026-10-26:mon`, `2026-10-31:pool`, `…:bonus:b1`) · `text` TEXT · `created_at` TEXT, an ISO timestamp from when it was typed |
+
+Notes use the same approach as sets. They are written to `localStorage` first and
+synced through their own queue (`/api/prompt-notes`), and they count in the sync
+pill. A note typed with no signal reaches D1 once the signal returns. A half-typed
+note survives a reload. The card is rendered outside `#app`, so logging a set
+never wipes it. `GET /api/prompts` returns the active prompts, each with its notes.
 
 ### The Travel calendar feed
 

@@ -152,3 +152,34 @@ INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side, muscl
   ('Lying Leg Raise',              'weighted', 3, '10-15', 45, 1,   0, 'Core',      'bodyweight'),
   ('Prone Y-T Raise',              'weighted', 3, '10-20', 45, 1,   0, 'Shoulders', 'bodyweight');
 
+
+-- -------------------------------------------------------------- THINK ABOUT
+-- Prompts shown at the top of the Log tab: "For today's workout, think about: …".
+-- There is no UI for these — Cowork inserts and retires them with plain SQL.
+-- Every row with active = 1 is shown; none active = no card at all.
+--   INSERT INTO prompts (text, context, thread) VALUES ('…', '…', 'friends:joe');
+--   UPDATE prompts SET active = 0, retired_at = CURRENT_TIMESTAMP WHERE id = ?;
+CREATE TABLE IF NOT EXISTS prompts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  text       TEXT    NOT NULL,                      -- one or two lines
+  context    TEXT,                                  -- optional, shown smaller under it
+  thread     TEXT,                                  -- e.g. 'friends:joe'
+  active     INTEGER NOT NULL DEFAULT 1,            -- 1 shown, 0 not
+  created_at TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  retired_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_prompts_active ON prompts(active);
+
+-- Quick notes typed against a prompt between sets. The client makes the id, so
+-- a retried save never writes twice. session_id is '<date>:<day>' — the same
+-- pair as the sessions table's key (e.g. '2026-10-26:mon', '2026-10-31:pool').
+CREATE TABLE IF NOT EXISTS prompt_notes (
+  id         TEXT    PRIMARY KEY,
+  prompt_id  INTEGER NOT NULL,                      -- prompts.id (no FK: a queued note must never be refused)
+  session_id TEXT    NOT NULL,
+  text       TEXT    NOT NULL,
+  created_at TEXT    NOT NULL                       -- ISO timestamp it was typed
+);
+
+CREATE INDEX IF NOT EXISTS idx_prompt_notes_prompt ON prompt_notes(prompt_id, created_at);
