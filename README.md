@@ -11,7 +11,7 @@ machine. History now lives server-side in D1 and is readable from any device.
 | --- | --- |
 | Hostname | `gym.torquemada.uk` (also `gym-torquemada.pages.dev`, and every per-deployment hash URL under it) |
 | Cloudflare | Pages project `gym-torquemada` · D1 `ironlog` (`ff1a03ea-1f08-4c1b-8878-59f13e69fdb7`) |
-| Access scope | `ACCESS_EMAILS` in `app.conf`: csainzmartinez@gmail.com, csainzmartinez@pm.me, and **mfsecades@gmail.com — no waiver recorded for this third address; awaiting Karl's decision (25 Oct 2026)**. Sophie (sophiearay1997@gmail.com) was waived in 27 Sep – 25 Oct 2026 and removed when PT ended. |
+| Access scope | `ACCESS_EMAILS` in `app.conf`: csainzmartinez@gmail.com and csainzmartinez@pm.me — Karl only, no waiver. mfsecades@gmail.com was also on it, with no waiver, until 25 Oct 2026, when Karl had it removed. Sophie (sophiearay1997@gmail.com) was waived in 27 Sep – 25 Oct 2026 and removed when PT ended. |
 | Schema | `schema.sql` (sets, sessions, exercises, plan_slots, rep_maxes) plus one-off `migrations/` |
 
 ---
@@ -58,7 +58,8 @@ grading days before the programme began. **Phases** (`phases` in programme.js)
 run off the calendar: weeks 1–2 show a 3-reps-in-reserve effort line, and the
 Christmas week (21–27 Dec) is a deload that halves every set count — the page and
 the pool both go through `W.blocksOn`, so the deload never pools sets it did not
-ask for. **Kit:** `kit.pulley` is false until the rack pulley is up; until then the
+ask for. **Kit:** `kit.pulley` is false until the pulley is up (wall or ceiling mount — the rack is
+two free-standing squat uprights, too short and light to take one); until then the
 cable pulldown, pushdown and face pull are prescribed as band pulldown, band
 pushdown and prone Y-T raise, and the day says so. Flip it and deploy when the
 pulley is mounted (v3 as first agreed — 1.5 h days, five blocks — was revised the
