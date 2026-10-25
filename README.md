@@ -58,7 +58,8 @@ grading days before the programme began. **Phases** (`phases` in programme.js)
 run off the calendar: weeks 1–2 show a 3-reps-in-reserve effort line, and the
 Christmas week (21–27 Dec) is a deload that halves every set count — the page and
 the pool both go through `W.blocksOn`, so the deload never pools sets it did not
-ask for. **Kit:** `kit.pulley` is false until the rack pulley is up; until then the
+ask for. **Kit:** `kit.pulley` is false until the pulley is up (wall or ceiling mount — the rack is
+two free-standing squat uprights, too short and light to take one); until then the
 cable pulldown, pushdown and face pull are prescribed as band pulldown, band
 pushdown and prone Y-T raise, and the day says so. Flip it and deploy when the
 pulley is mounted (v3 as first agreed — 1.5 h days, five blocks — was revised the
