@@ -1,4 +1,4 @@
-// The Planner tab. Sophie builds the week here: every day has a morning slot
+// The Planner tab. The week at a glance: every day has a morning slot
 // and a bonus slot, each a list of exercises from the library. A slot reaches
 // the Log tab only once it is LOCKED; until then it is a draft.
 //
@@ -37,7 +37,7 @@
     document.getElementById("logView").hidden = t !== "log";
     document.getElementById("plannerView").hidden = t !== "planner";
     if (t === "planner") { renderPlanner(); load(); }
-    // So Sophie can bookmark the planner and land on it directly.
+    // So the planner can be bookmarked and opened directly.
     try { history.replaceState(null, "", t === "planner" ? "#planner" : location.pathname); } catch (e) {}
   }
   document.querySelectorAll("#tabs button").forEach(function(b){
@@ -171,7 +171,7 @@
 
     if (maxesInfo && !maxesInfo.rows) {
       // Trainerize has no export for workout history; Karl pulls it with
-      // agentic-fitness-sync and a Claude session loads it. Nothing for Sophie to do.
+      // agentic-fitness-sync and a Claude session loads it.
       h += '<div class="card outstanding"><b>No Trainerize rep maxes imported yet.</b> ' +
            'Karl is pulling them out of Trainerize; they appear here once loaded. ' +
            'Anything logged in Iron Log already counts.</div>';
@@ -232,7 +232,6 @@
              '<ul>' + p.blocks.map(function(b){
                return '<li>' + b.map(function(x){ return esc(x.ex) + ' ' + x.sets + '×' + esc(x.reps); }).join(' + ') + '</li>';
              }).join("") + '</ul>' +
-             (p.ptAlternative ? '<div class="none">or PT with Sophie</div>' : '') +
            '</div>';
   }
 

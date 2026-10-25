@@ -13,8 +13,10 @@
 //     lift it replaces>", and pays off that lift.
 //   - The week is Mon–Sun on the London clock, so the pool clears at Sunday
 //     23:59 Europe/London: unfinished items drop off and Monday starts clean.
-//   - Wednesday is satisfied by a PT session (any set logged under day = "pt"
-//     that week) as well as by its own sets.
+//   - Days before the programme's `startsOn` are not graded: a new programme
+//     starting mid-week never judges the days before it against itself.
+//   - (Until 25 Oct 2026 a PT session excused Wednesday. There is no PT now;
+//     old "pt" rows still count in the tally by their library muscle.)
 //
 // Loaded as a plain script by the page, and by the tests under node.
 (function (root) {
@@ -101,14 +103,13 @@
   function computePool(prog, rows, today) {
     var dates = weekDates(today);
     rows = (rows || []).filter(function (r) { return r.date >= dates.mon && r.date <= dates.sun; });
-    var ptDone = rows.some(function (r) { return r.day === "pt" && r.sets > 0; });
 
     // 1. What each finished day missed.
     var missed = [];
     ORDER.forEach(function (d) {
       var day = prog.days[d];
       if (!day || !(dates[d] < today)) return;          // not planned, or not over yet
-      if (day.ptAlternative && ptDone) return;
+      if (prog.startsOn && dates[d] < prog.startsOn) return;   // before this programme began
       plannedFor(day).forEach(function (p) {
         // The lift itself, or a swap done for it that day (day = "mon:<lift>").
         var done = countWhere(rows, function (r) {
@@ -220,7 +221,9 @@
           var e = prog.exercises[s.ex] || {};
           var item = {
             name: s.ex, sets: s.sets, reps: s.reps, kit: s.kit || null,
-            rest: superset ? prog.supersetRest : (e.rest != null ? e.rest : 75),
+            // A lift's own `rest` in the block wins: the light partner of a
+            // heavy barbell lift carries the long gap the barbell lift needs.
+            rest: s.rest != null ? s.rest : (superset ? prog.supersetRest : (e.rest != null ? e.rest : 75)),
             step: e.step || null, band: !!e.band, side: !!e.side,
             cues: (e.cues || []).map(function (c) { return prog.cues[c]; }).filter(Boolean)
                     .concat(e.note ? [e.note] : []),

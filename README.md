@@ -9,7 +9,7 @@ machine. History now lives server-side in D1 and is readable from any device.
 
 ## What it does
 
-- Opens straight onto today's session — up to three blocks — with the pool of missed
+- Opens straight onto today's session — five blocks Mon/Fri, three Tue–Thu — with the pool of missed
   work above it and the week's volume per muscle below. No navigation to reach them.
 - Shows last session's numbers per lift and prefills reps/weight from them.
 - One tap logs a set. Rest timer starts automatically.
@@ -41,8 +41,15 @@ the Planner for those mornings (a slot locked under the old programme cannot hid
 the new one; nothing in `plan_slots` was deleted). The Planner's Sat/Sun morning
 slots and every bonus slot still work as before.
 
-**Blocks.** A session is at most three blocks; a block is one lift (straight sets)
-or a superset of two, alternated set by set. The card for the lift to do next is
+**Programme v3 (26 Oct 2026 → next Quarterly, ~late Jan 2027).** No PT. Mon and
+Fri ~1.5 h, Tue–Thu 30–40 min; maximum practical upper-body hypertrophy volume,
+legs held with heavy strength sets (squat Mon, deadlift Fri). `startsOn` in
+programme.js stops the pool grading days before the programme began.
+
+**Blocks.** A session is at most five blocks on Mon/Fri and three Tue–Thu; a block
+is one lift (straight sets) or a superset of two, alternated set by set. A lift in
+a superset can carry its own `rest`: the light partner of a squat or deadlift
+holds the long gap, so the barbell lift gets about three minutes. The card for the lift to do next is
 marked, and the rest timer after a superset set is short and names the other lift.
 An optional warm-up sits above block 1, outside the cap, and earns no volume.
 
@@ -50,10 +57,11 @@ An optional warm-up sits above block 1, outside the cap, and earns no volume.
 Europe/London) goes into the pool, shown at the top of the Log. Working it off
 is an ordinary session ("Work the pool"), logged under `day = 'pool'`; each set
 pays off the oldest missed set of that lift. The week is Mon–Sun on the London
-clock, so the pool clears Sunday 23:59 and Monday starts clean. Bonus work is only
-offered once the pool is empty. On Wednesday, a "PT with Sophie" session (logged
-under `day = 'pt'`, lifts added as you go) replaces leg day and keeps the squats
-and deadlifts out of the pool. Nothing about the pool is stored: it is worked out
+clock, so the pool clears Sunday 23:59 and Monday starts clean. **The weekend has
+one catch-up day:** whichever of Sat/Sun gets pool work first is it, and the other
+shows as a rest day and stops offering the pool. v3 has no bonus menu (a locked
+Planner bonus slot still works, once the pool is empty). There is no PT mode any
+more; old `day = 'pt'` rows still count in the tally by library muscle. Nothing about the pool is stored: it is worked out
 from the week's sets (`public/week.js`, fed by `/api/week-status`), so it cannot
 drift from them. `npm test` checks it against the real programme.
 
