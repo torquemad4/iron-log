@@ -5,6 +5,15 @@ Karl's training log. Cloudflare Pages + Pages Functions + D1.
 Replaces the localStorage artifact, which only ever existed on one browser on one
 machine. History now lives server-side in D1 and is readable from any device.
 
+## Where it runs (App Register facts)
+
+| | |
+| --- | --- |
+| Hostname | `gym.torquemada.uk` (also `gym-torquemada.pages.dev`, and every per-deployment hash URL under it) |
+| Cloudflare | Pages project `gym-torquemada` · D1 `ironlog` (`ff1a03ea-1f08-4c1b-8878-59f13e69fdb7`) |
+| Access scope | `ACCESS_EMAILS` in `app.conf`: csainzmartinez@gmail.com, csainzmartinez@pm.me, and **mfsecades@gmail.com — no waiver recorded for this third address; awaiting Karl's decision (25 Oct 2026)**. Sophie (sophiearay1997@gmail.com) was waived in 27 Sep – 25 Oct 2026 and removed when PT ended. |
+| Schema | `schema.sql` (sets, sessions, exercises, plan_slots, rep_maxes) plus one-off `migrations/` |
+
 ---
 
 ## What it does
