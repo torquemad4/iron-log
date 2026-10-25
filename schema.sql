@@ -139,3 +139,16 @@ INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side, muscl
   ('Bulgarian Split Squat',           'weighted', 3, '8-15',  90, 1,   1, 'Legs',      'bodyweight'),
   ('Backpack Goblet Squat',           'weighted', 3, '12-20', 90, 1,   0, 'Legs',      'other'),
   ('Single-Leg RDL',                  'weighted', 3, '8-15',  75, 1,   1, 'Legs',      'bodyweight');
+
+-- Programme v3.1 (25 Oct 2026): lifts new to the library. Barbell Romanian
+-- Deadlift is already there from the Trainerize import, so its history joins.
+INSERT OR IGNORE INTO exercises (name, kind, sets, reps, rest, step, side, muscle, equipment) VALUES
+  ('Cable Pulldown',               'weighted', 4, '8-12',  75, 2.5, 0, 'Back',      'other'),
+  ('Cable Pushdown',               'weighted', 3, '10-15', 60, 2.5, 0, 'Triceps',   'other'),
+  ('Cable Face Pull',              'weighted', 3, '12-20', 60, 2.5, 0, 'Shoulders', 'other'),
+  ('Band Pushdown',                'banded',   3, '10-15', 60, 1,   0, 'Triceps',   'band'),
+  ('Low-Incline Neutral DB Press', 'weighted', 3, '8-12',  90, 2,   0, 'Chest',     'dumbbell'),
+  ('Weighted Crunch',              'weighted', 3, '10-15', 45, 2.5, 0, 'Core',      'other'),
+  ('Lying Leg Raise',              'weighted', 3, '10-15', 45, 1,   0, 'Core',      'bodyweight'),
+  ('Prone Y-T Raise',              'weighted', 3, '10-20', 45, 1,   0, 'Shoulders', 'bodyweight');
+

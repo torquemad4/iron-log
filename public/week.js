@@ -86,6 +86,28 @@
   }
 
   // planned sets per exercise for one day, in block order
+  // The programme phase (if any) a date falls in: { label, effort, setsFactor }.
+  function phaseOn(prog, iso) {
+    var list = prog.phases || [];
+    for (var i = 0; i < list.length; i++) if (iso >= list[i].from && iso <= list[i].to) return list[i];
+    return null;
+  }
+
+  // A day's blocks as prescribed on a date: a deload phase scales every set
+  // count (rounded up, never below 1). The page and the pool both go through
+  // this, so a deload week cannot pool sets it never asked for.
+  function blocksOn(prog, blocks, iso) {
+    var ph = iso ? phaseOn(prog, iso) : null, f = ph && ph.setsFactor;
+    if (!f || f === 1) return blocks;
+    return (blocks || []).map(function (b) {
+      return b.map(function (s) {
+        var o = {}; for (var k in s) o[k] = s[k];
+        o.sets = Math.max(1, Math.ceil(s.sets * f));
+        return o;
+      });
+    });
+  }
+
   function plannedFor(day) {
     var list = [], at = {};
     (day.blocks || []).forEach(function (b) {
@@ -110,7 +132,7 @@
       var day = prog.days[d];
       if (!day || !(dates[d] < today)) return;          // not planned, or not over yet
       if (prog.startsOn && dates[d] < prog.startsOn) return;   // before this programme began
-      plannedFor(day).forEach(function (p) {
+      plannedFor({ blocks: blocksOn(prog, day.blocks, dates[d]) }).forEach(function (p) {
         // The lift itself, or a swap done for it that day (day = "mon:<lift>").
         var done = countWhere(rows, function (r) {
           return (r.day === d && key(r.exercise) === key(p.exercise)) || key(r.day) === key(d + ":" + p.exercise);
@@ -239,7 +261,8 @@
 
   var api = {
     todayIn: todayIn, weekDates: weekDates, mergeRows: mergeRows,
-    computePool: computePool, tally: tally, rankPool: rankPool, isPoolDay: isPoolDay, expand: expand, plannedFor: plannedFor
+    computePool: computePool, tally: tally, rankPool: rankPool, isPoolDay: isPoolDay, expand: expand, plannedFor: plannedFor,
+    phaseOn: phaseOn, blocksOn: blocksOn
   };
   root.IronWeek = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
