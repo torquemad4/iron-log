@@ -234,6 +234,25 @@
   .tally .tv{text-align:right; font-variant-numeric:tabular-nums; color:var(--muted)}
   .tally .tv b{color:var(--ink)}
   .awaytag{font-size:12px; font-weight:700; color:#ff8a9a; margin-left:10px; vertical-align:2px}
+
+  /* ---------- think about ---------- */
+  #think{padding:12px 16px 0; max-width:640px; margin:0 auto}
+  #think:empty{display:none}
+  .think{border-left:3px solid var(--good); margin-bottom:0}
+  .think + .think{margin-top:10px}
+  .think .tk{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted)}
+  .think .tt{font-size:17px; font-weight:700; margin:4px 0 0; white-space:pre-line}
+  .think .tc{font-size:13px; color:var(--muted); margin:4px 0 0; white-space:pre-line}
+  .think textarea{width:100%; margin-top:12px; background:var(--panel-2); color:var(--ink);
+    border:1px solid var(--line); border-radius:10px; padding:10px; font:inherit; font-size:15px; resize:vertical}
+  .think textarea:focus{outline:2px solid var(--good); border-color:transparent}
+  .think .tn{display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:6px;
+    font-size:12px; color:var(--muted)}
+  .think details{margin-top:8px; font-size:14px}
+  .think summary{cursor:pointer; color:var(--muted); font-weight:700; font-size:13px; padding:4px 0}
+  .think .nl{margin:6px 0 0; padding:0; list-style:none}
+  .think .nl li{padding:6px 0; border-top:1px solid var(--line); white-space:pre-wrap}
+  .think .nl small{display:block; color:var(--muted); font-size:11px}
 </style>
 </head>
 <body>
@@ -255,6 +274,9 @@
 </header>
 
 <div id="logView">
+  <!-- Rendered apart from #app on purpose: #app is rebuilt on every logged set,
+       which would wipe a note half-typed between sets. -->
+  <div id="think"></div>
   <div class="picker" id="picker"></div>
   <main id="app"></main>
 </div>
@@ -390,6 +412,9 @@
   var LIB     = "ironlog.lib.v1";     // the exercise library, cached for offline
   var WEEK    = "ironlog.week.v1";    // last /api/week-status, so the pool and the
                                       // tally still show at the rack with no signal
+  var PROMPTS = "ironlog.prompts.v1"; // last /api/prompts, for the Think-about card offline
+  var NOTEBOX = "ironlog.notebox.v1"; // prompt notes awaiting sync
+  var DRAFTS  = "ironlog.drafts.v1";  // half-typed notes, per prompt id
 
   var state = {
     day: null,          // weekday key of the CORE session in view
@@ -456,6 +481,7 @@
        Now the only reasons not to try are: nothing queued, or already trying.
        A failed attempt costs one request and leaves the queue untouched, which
        is far cheaper than not trying at all. */
+    flushNotes();
     if ((!q.length && !dq.length) || flushing) { paintSync(); return; }
     flushing = true;
     fetch("/api/sets", {
@@ -480,7 +506,7 @@
     });
   }
   function paintSync(){
-    var el = document.getElementById("sync"), n = outbox().length + delbox().length;
+    var el = document.getElementById("sync"), n = outbox().length + delbox().length + read(NOTEBOX, []).length;
     /* Report the last real OUTCOME, not the browser's guess about connectivity.
        navigator.onLine is kept only as a hint in the wording. */
     if (n && lastSyncFailed){
@@ -498,7 +524,7 @@
             el.addEventListener("click", function(){ lastSyncFailed=false; paintSync(); flush(); }); } })();
   setInterval(flush, 15000);
   addEventListener("online", flush);
-  addEventListener("visibilitychange", function(){ if (!document.hidden) flush(); });
+  addEventListener("visibilitychange", function(){ if (!document.hidden){ flush(); fetchPrompts(); } });
 
   // ---------- clock ----------
   function tick(){
@@ -1360,6 +1386,123 @@
     state.mode = pool && pool.total ? "pool" : "core";
   }
 
+  // ---------- think about ----------
+  // Prompts come from D1 (Cowork writes them by SQL); notes go back to it
+  // through their own offline queue, same discipline as sets. Enter saves,
+  // Shift+Enter is a new line — between sets on Skunkworks it is type, Enter,
+  // back to the bar.
+  var thinkSig = null;
+  function prompts(){ return read(PROMPTS, []); }
+  function notebox(){ return read(NOTEBOX, []); }
+  function drafts(){ return read(DRAFTS, {}); }
+
+  function notesFor(pid){
+    // Queued notes first (not yet in D1), then what the server returned.
+    var p = prompts().filter(function(x){ return x.id === pid; })[0];
+    var seen = {}, out = [];
+    notebox().filter(function(n){ return n.prompt_id === pid; }).reverse()
+      .concat(p ? p.notes || [] : []).forEach(function(n){
+        if (!seen[n.id]){ seen[n.id] = 1; out.push(n); }
+      });
+    return out;
+  }
+  function noteListHTML(pid){
+    var ns = notesFor(pid);
+    if (!ns.length) return "";
+    return '<details><summary>Earlier notes (' + ns.length + ')</summary><ul class="nl">' +
+      ns.map(function(n){
+        var d = new Date(n.created_at);
+        return '<li><small>' + esc(isNaN(d) ? "" : d.toLocaleString([], { weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })) +
+               '</small>' + esc(n.text) + '</li>';
+      }).join("") + '</ul></details>';
+  }
+
+  function renderThink(){
+    var box = document.getElementById("think"), ps = prompts();
+    var sig = JSON.stringify(ps.map(function(p){ return [p.id, p.text, p.context]; }));
+    if (sig === thinkSig){
+      // Same prompts: refresh only the note lists, so a half-typed note and its
+      // focus survive a background refresh. An open list stays open.
+      ps.forEach(function(p){
+        var el = box.querySelector('[data-nl="' + p.id + '"]');
+        if (!el) return;
+        var open = el.querySelector("details") && el.querySelector("details").open;
+        el.innerHTML = noteListHTML(p.id);
+        if (open && el.querySelector("details")) el.querySelector("details").open = true;
+      });
+      return;
+    }
+    thinkSig = sig;
+    if (!ps.length){ box.innerHTML = ""; return; }   // nothing active: no card at all
+    var dr = drafts();
+    box.innerHTML = ps.map(function(p){
+      return '<div class="card think">' +
+        '<div class="tk">For today&rsquo;s workout, think about:</div>' +
+        '<p class="tt">' + esc(p.text) + '</p>' +
+        (p.context ? '<p class="tc">' + esc(p.context) + '</p>' : '') +
+        '<textarea rows="2" data-pid="' + p.id + '" placeholder="Quick note — Enter saves, Shift+Enter for a new line">' +
+          esc(dr[p.id] || "") + '</textarea>' +
+        '<div class="tn"><span data-st="' + p.id + '"></span>' +
+          '<button class="smallbtn" data-save="' + p.id + '">Save note</button></div>' +
+        '<div data-nl="' + p.id + '">' + noteListHTML(p.id) + '</div>' +
+      '</div>';
+    }).join("");
+    box.querySelectorAll("textarea[data-pid]").forEach(function(t){
+      var pid = Number(t.dataset.pid);
+      t.addEventListener("input", function(){ var d = drafts(); d[pid] = t.value; write(DRAFTS, d); });
+      t.addEventListener("keydown", function(e){
+        if (e.key === "Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); saveNote(pid); }
+      });
+    });
+    box.querySelectorAll("[data-save]").forEach(function(b){
+      b.onclick = function(){ saveNote(Number(b.dataset.save)); };
+    });
+  }
+
+  function saveNote(pid){
+    var t = document.querySelector('#think textarea[data-pid="' + pid + '"]');
+    var text = t ? t.value.trim() : "";
+    if (!text) return;
+    var q = notebox();
+    q.push({ id: uid(), prompt_id: pid, session_id: state.date + ":" + logDay(),
+             text: text, created_at: new Date().toISOString() });
+    write(NOTEBOX, q);
+    t.value = "";
+    var d = drafts(); delete d[pid]; write(DRAFTS, d);
+    var st = document.querySelector('#think [data-st="' + pid + '"]');
+    if (st) st.textContent = "Saved " + new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
+    renderThink();         // same prompts, so only the lists refresh
+    paintSync(); flushNotes();
+  }
+
+  var flushingNotes = false;
+  function flushNotes(){
+    var q = notebox();
+    if (!q.length || flushingNotes) return;
+    flushingNotes = true;
+    fetch("/api/prompt-notes", {
+      method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ notes: q })
+    }).then(function(r){
+      if (!r.ok) throw new Error("http " + r.status);
+      var sent = {}; q.forEach(function(n){ sent[n.id] = 1; });
+      // Fold what landed into the cached prompts so it stays in the list.
+      var ps = prompts();
+      ps.forEach(function(p){
+        q.filter(function(n){ return n.prompt_id === p.id; }).forEach(function(n){ (p.notes = p.notes || []).unshift(n); });
+      });
+      write(PROMPTS, ps);
+      write(NOTEBOX, notebox().filter(function(n){ return !sent[n.id]; }));
+      lastSyncFailed = false;
+    }).catch(function(){ lastSyncFailed = true; })
+      .then(function(){ flushingNotes = false; paintSync(); renderThink(); });
+  }
+
+  function fetchPrompts(){
+    return fetch("/api/prompts").then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ if (j && Array.isArray(j.prompts)){ write(PROMPTS, j.prompts); renderThink(); } })
+      .catch(function(){});
+  }
+
   // ---------- boot ----------
   state.day = window.DAY_KEYS[new Date().getDay()];
   loadLocal();
@@ -1382,7 +1525,9 @@
   tick();
   paintSync();
   render();
+  renderThink();
   flush();
+  fetchPrompts();
 
   // The week's sets decide the pool, the tally and whether today's session
   // shows as done, so the picker is rebuilt once they land.
