@@ -50,10 +50,19 @@ the Planner for those mornings (a slot locked under the old programme cannot hid
 the new one; nothing in `plan_slots` was deleted). The Planner's Sat/Sun morning
 slots and every bonus slot still work as before.
 
-**Programme v3 (26 Oct 2026 → next Quarterly, ~late Jan 2027).** No PT. Mon and
-Fri ~1.5 h, Tue–Thu 30–40 min; maximum practical upper-body hypertrophy volume,
-legs held with heavy strength sets (squat Mon, deadlift Fri). `startsOn` in
-programme.js stops the pool grading days before the programme began.
+**Programme v3.1 — the moderate cut (26 Oct 2026 → next Quarterly, ~Jan 2027).**
+No PT. Mon/Fri ~70 min at four blocks, Tue–Thu 35–40 at three; upper-body volume
+sized for a deficit (biceps 24, triceps 21.5, back 18 …), direct abs, legs at 6–8
+reps (squat Mon, Romanian deadlift Fri) done last. `startsOn` stops the pool
+grading days before the programme began. **Phases** (`phases` in programme.js)
+run off the calendar: weeks 1–2 show a 3-reps-in-reserve effort line, and the
+Christmas week (21–27 Dec) is a deload that halves every set count — the page and
+the pool both go through `W.blocksOn`, so the deload never pools sets it did not
+ask for. **Kit:** `kit.pulley` is false until the rack pulley is up; until then the
+cable pulldown, pushdown and face pull are prescribed as band pulldown, band
+pushdown and prone Y-T raise, and the day says so. Flip it and deploy when the
+pulley is mounted (v3 as first agreed — 1.5 h days, five blocks — was revised the
+same day; see git history).
 
 **Blocks.** A session is at most five blocks on Mon/Fri and three Tue–Thu; a block
 is one lift (straight sets) or a superset of two, alternated set by set. A lift in

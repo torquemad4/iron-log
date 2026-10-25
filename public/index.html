@@ -374,8 +374,8 @@
 <!-- ?v= : bump it whenever programme.js, week.js or planner.js change, so a
      phone holding an old cached copy cannot pair it with this page. A blank
      pool page on 7 Oct 2026 was exactly that: new page, old week.js. -->
-<script src="programme.js?v=2026-10-25a"></script>
-<script src="week.js?v=2026-10-25a"></script>
+<script src="programme.js?v=2026-10-25c"></script>
+<script src="week.js?v=2026-10-25c"></script>
 <script>
 (function(){
   "use strict";
@@ -593,7 +593,7 @@
      anything renders against them, fetch fresh copies once, and reload. One
      attempt per tab, so a genuinely broken deploy cannot loop. */
   var HEALED = "ironlog.healed";
-  if (!P || !W || !P.alternatives || !P.startsOn || typeof W.isPoolDay !== "function" || typeof W.rankPool !== "function") {
+  if (!P || !W || !P.alternatives || !P.startsOn || !P.phases || typeof W.blocksOn !== "function" || typeof W.isPoolDay !== "function" || typeof W.rankPool !== "function") {
     var tried = false;
     try { tried = sessionStorage.getItem(HEALED) === "1"; sessionStorage.setItem(HEALED, "1"); } catch (e) {}
     if (!tried) {
@@ -675,7 +675,7 @@
   function coreFor(day){
     var d = P.days[day];
     if (d) {
-      var sess = fromBlocks(d.label, d.blocks,
+      var sess = fromBlocks(d.label, W.blocksOn(P, d.blocks, londonToday()),
         { core: true, heads: true, minutes: d.minutes });
       sess.blocks.forEach(function(b){ b.exercises.forEach(function(e){ applySwap(e, day, b.superset); }); });
       return withWarmup(sess);
@@ -970,7 +970,15 @@
     }
 
     if (prog.core && prog.minutes){
-      html += '<p class="note">Up to ' + prog.minutes + ' min. ' + esc(P.effort) + ' ' + esc(P.progression) + '</p>';
+      var ph = W.phaseOn(P, londonToday());
+      // A phase's effort line names the phase itself ("Weeks 1–2: …").
+      html += '<p class="note">Up to ' + prog.minutes + ' min. ' +
+              (ph && ph.effort ? '<b>' + esc(ph.effort) + '</b>' : esc(P.effort)) + ' ' + esc(P.progression) + '</p>';
+      // Until the pulley is mounted the cable lifts are band/floor stand-ins.
+      // Saying so on the day is the reminder that it is still to do.
+      if (P.kit && !P.kit.pulley && prog.exercises.some(function(e){ return /^(Banded Lat Pulldown|Band Pushdown|Prone Y-T Raise)$/.test(e.name); })){
+        html += '<p class="note">Band stand-ins for the cable lifts until the pulley is up — once it is, tell Claude &ldquo;the pulley&rsquo;s up&rdquo;.</p>';
+      }
     }
     if (prog.pool && !prog.exercises.length){
       html += '<div class="card"><div class="rest-day"><h2>Pool is empty</h2><p>Nothing missed this week.</p></div></div>';
@@ -1411,6 +1419,6 @@
   };
 })();
 </script>
-<script src="planner.js?v=2026-10-25a"></script>
+<script src="planner.js?v=2026-10-25c"></script>
 </body>
 </html>

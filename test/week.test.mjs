@@ -18,11 +18,11 @@ function dayRows(day) {
 }
 const fullWeek = () => ["mon", "tue", "wed", "thu", "fri"].flatMap(dayRows);
 
-test("the plan as written lands where v3 says (counted 25 Oct 2026)", () => {
+test("the plan as written lands where v3.1 says (counted 25 Oct 2026)", () => {
   const t = Object.fromEntries(W.tally(P, fullWeek(), []).map(r => [r.muscle, r.sets]));
   assert.deepEqual(t, {
-    Biceps: 30, Triceps: 24.5, Traps: 22, Chest: 14,
-    "Side delts": 20.5, "Rear delts": 17, Back: 18, Legs: 6
+    Biceps: 24, Triceps: 21.5, Back: 18, Traps: 15.5, "Side delts": 13.5,
+    Chest: 10, "Rear delts": 9, Abs: 9, Legs: 6
   });
 });
 
@@ -31,8 +31,8 @@ test("the full plan lands inside every weekly target", () => {
   for (const g of P.targets) assert.ok(t[g.muscle] >= g.min && t[g.muscle] <= g.max, `${g.muscle} ${t[g.muscle]}`);
 });
 
-test("five blocks on Mon/Fri, three Tue–Thu, and no superset more than two lifts", () => {
-  const cap = { mon: 5, tue: 3, wed: 3, thu: 3, fri: 5 };
+test("four blocks on Mon/Fri, three Tue–Thu, and no superset more than two lifts", () => {
+  const cap = { mon: 4, tue: 3, wed: 3, thu: 3, fri: 4 };
   for (const [k, d] of Object.entries(P.days)) {
     assert.ok(d.blocks.length <= cap[k], k);
     for (const b of d.blocks) assert.ok(b.length >= 1 && b.length <= 2, k);
@@ -47,7 +47,7 @@ test("a day does not go to the pool until it is over", () => {
 
 test("everything missed Mon and Tue is in the pool on Wednesday", () => {
   const p = W.computePool(P, [], D.wed);
-  assert.equal(p.total, 38 + 18);
+  assert.equal(p.total, 27 + 18);
   assert.deepEqual([...new Set(p.items.map(i => i.day))], ["mon", "tue"]);
 });
 
@@ -59,13 +59,13 @@ test("a partly logged day only pools what was missed", () => {
 });
 
 test("pool work pays off the oldest missed sets first", () => {
-  // Skull Crusher: Mon 4 + Tue 3 missed. Three pool sets clear Monday's first.
-  const rows = [...dayRows("mon").filter(r => r.exercise !== "Skull Crusher"),
-                ...dayRows("tue").filter(r => r.exercise !== "Skull Crusher"), ...dayRows("wed"),
-                { day: "pool", date: D.wed, exercise: "Skull Crusher", sets: 3 }];
+  // Barbell Shrug: Mon 3 + Tue 3 missed. Two pool sets come off Monday's first.
+  const rows = [...dayRows("mon").filter(r => r.exercise !== "Barbell Shrug"),
+                ...dayRows("tue").filter(r => r.exercise !== "Barbell Shrug"), ...dayRows("wed"),
+                { day: "pool", date: D.wed, exercise: "Barbell Shrug", sets: 2 }];
   const p = W.computePool(P, rows, D.thu);
   assert.deepEqual(p.items.map(i => [i.day, i.exercise, i.remaining]),
-    [["mon", "Skull Crusher", 1], ["tue", "Skull Crusher", 3]]);
+    [["mon", "Barbell Shrug", 1], ["tue", "Barbell Shrug", 3]]);
   assert.equal(p.exercises[0].remaining, 4);
 });
 
@@ -75,15 +75,41 @@ test("days before the programme started are not graded against it", () => {
 });
 
 test("the light partner of a heavy lift carries the long rest", () => {
-  const b = W.expand(P, P.days.mon.blocks).blocks[0].exercises;
-  assert.deepEqual(b.map(e => [e.name, e.rest]), [["Barbell Back Squat", 45], ["Rear Delt Flye", 120]]);
+  const b = W.expand(P, P.days.mon.blocks).blocks[3].exercises;
+  assert.deepEqual(b.map(e => [e.name, e.rest]), [["Barbell Back Squat", 45], ["Weighted Crunch", 120]]);
+  const f = W.expand(P, P.days.fri.blocks).blocks[3].exercises;
+  assert.deepEqual(f.map(e => [e.name, e.rest]), [["Barbell Romanian Deadlift", 45], ["Hammer Curl", 105]]);
   const plain = W.expand(P, P.days.tue.blocks).blocks[0].exercises;
   assert.deepEqual(plain.map(e => e.rest), [45, 45]);
 });
 
+test("legs come last on the long days", () => {
+  for (const d of ["mon", "fri"]) {
+    const last = P.days[d].blocks.at(-1).map(s => s.ex);
+    assert.ok(last.some(n => P.exercises[n].direct?.includes("Legs")), d);
+  }
+});
+
+test("until the pulley is up, the band and floor stand-ins are what is prescribed", () => {
+  assert.equal(P.kit.pulley, false);
+  const names = Object.values(P.days).flatMap(d => d.blocks.flat().map(s => s.ex));
+  for (const c of ["Cable Pulldown", "Cable Pushdown", "Cable Face Pull"]) assert.ok(!names.includes(c), c);
+  for (const s of ["Banded Lat Pulldown", "Band Pushdown", "Prone Y-T Raise"]) assert.ok(names.includes(s), s);
+});
+
+test("weeks 1–2 carry the 3-in-reserve effort; Christmas week is a half-sets deload", () => {
+  assert.match(W.phaseOn(P, "2026-10-26").effort, /3 reps in reserve/);
+  assert.equal(W.phaseOn(P, "2026-11-09"), null);
+  assert.equal(W.phaseOn(P, "2026-12-21").setsFactor, 0.5);
+  const mon = W.blocksOn(P, P.days.mon.blocks, "2026-12-21").flat().map(s => s.sets);
+  assert.deepEqual(mon, [2, 2, 2, 2, 2, 2, 2, 2]);       // 4 and 3 both round up to 2
+  // The pool asks only for what the deload prescribed: Mon 16 + Tue 12.
+  assert.equal(W.computePool(P, [], "2026-12-23").total, 16 + 12);
+});
+
 test("the pool clears when the week rolls over", () => {
   // Nothing at all logged last week; next Monday the pool is empty.
-  assert.equal(W.computePool(P, [], D.sun).total, 38 + 18 + 18 + 18 + 39);
+  assert.equal(W.computePool(P, [], D.sun).total, 27 + 18 + 19 + 18 + 27);
   assert.equal(W.computePool(P, [], "2026-11-02").total, 0);
 });
 
@@ -119,12 +145,13 @@ test("the catch-up pool lists lifts for the muscles furthest from target first",
   // Wednesday onwards with nothing logged: Mon + Tue in the pool, tally all zero.
   const pool = W.computePool(P, [], D.wed);
   const ranked = W.rankPool(P, pool.exercises, [], []).map(x => x.exercise);
-  // Scores (top of range): Row 18 + ½·30 + ½·24 = 45 · Pulldown 18 + ½·30 = 33 ·
-  // DB Curl 30 · Barbell Curl 30 · Floor Press 14 + ½·26 = 27 · Skull 26 · Shrug 24 ·
-  // Lateral 22 · Rear Delt 18 · Squat 6. Legs, held at maintenance, come last.
+  // Scores (top of range): Row 20 + ½·26 + ½·18 = 42 · Pulldown 20 + ½·26 = 33 ·
+  // DB Curl 26 · Barbell Curl 26 · Skull 24 · Band Pushdown 24 · Floor Press
+  // 11 + ½·24 = 23 · Shrug 18 · Lateral 16 · Y-T 12 · abs 10 · Squat 6.
   assert.deepEqual(ranked, ["Single-Arm DB Row", "Banded Lat Pulldown", "DB Curl", "Barbell Bicep Curl",
-                            "Close-Grip Floor Press", "Skull Crusher", "Barbell Shrug",
-                            "One-Arm DB Lateral Raise", "Rear Delt Flye", "Barbell Back Squat"]);
+                            "Skull Crusher", "Band Pushdown", "Close-Grip Floor Press", "Barbell Shrug",
+                            "One-Arm DB Lateral Raise", "Prone Y-T Raise", "Weighted Crunch", "Lying Leg Raise",
+                            "Barbell Back Squat"]);
 });
 
 test("a muscle already at the top of its range scores nothing", () => {
@@ -162,8 +189,8 @@ test("a swap done on its planned day counts as that day's set, so nothing pools"
                 { day: "mon:Barbell Shrug", date: D.mon, exercise: "Backpack Shrug", sets: 4 }];
   assert.equal(W.computePool(P, rows, D.tue).total, 0);
   const t = Object.fromEntries(W.tally(P, rows, []).map(r => [r.muscle, r.sets]));
-  // 4 from the backpack shrugs + ½ × 4 from Monday's single-arm rows.
-  assert.equal(t.Traps, 6);
+  // 4 from the backpack shrugs; Monday has no rows in v3.1.
+  assert.equal(t.Traps, 4);
 });
 
 test("every lift on every day has an alternative", () => {
