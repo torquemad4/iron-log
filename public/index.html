@@ -374,8 +374,8 @@
 <!-- ?v= : bump it whenever programme.js, week.js or planner.js change, so a
      phone holding an old cached copy cannot pair it with this page. A blank
      pool page on 7 Oct 2026 was exactly that: new page, old week.js. -->
-<script src="programme.js?v=2026-10-08a"></script>
-<script src="week.js?v=2026-10-08a"></script>
+<script src="programme.js?v=2026-10-25a"></script>
+<script src="week.js?v=2026-10-25a"></script>
 <script>
 (function(){
   "use strict";
@@ -387,13 +387,13 @@
   var LOCAL   = "ironlog.local.v1";
   var STARTED = "ironlog.started.v1";
   var PLAN    = "ironlog.plan.v1";    // last copy of the planner, so the gym
-  var LIB     = "ironlog.lib.v1";     // still gets Sophie's sessions offline
+  var LIB     = "ironlog.lib.v1";     // the exercise library, cached for offline
   var WEEK    = "ironlog.week.v1";    // last /api/week-status, so the pool and the
                                       // tally still show at the rack with no signal
 
   var state = {
     day: null,          // weekday key of the CORE session in view
-    mode: "core",       // "core" | "pool" | "pt" | "bonus" — none of the others replaces core
+    mode: "core",       // "core" | "pool" | "bonus" — neither of the others replaces core
     bonusId: null,      // which bonus, when mode === "bonus"
     chosen: false,      // the session in view was picked (or resumed), not defaulted
     week: null,         // /api/week-status: the week's sets, for the pool and the tally
@@ -593,7 +593,7 @@
      anything renders against them, fetch fresh copies once, and reload. One
      attempt per tab, so a genuinely broken deploy cannot loop. */
   var HEALED = "ironlog.healed";
-  if (!P || !W || !P.alternatives || typeof W.isPoolDay !== "function" || typeof W.rankPool !== "function") {
+  if (!P || !W || !P.alternatives || !P.startsOn || typeof W.isPoolDay !== "function" || typeof W.rankPool !== "function") {
     var tried = false;
     try { tried = sessionStorage.getItem(HEALED) === "1"; sessionStorage.setItem(HEALED, "1"); } catch (e) {}
     if (!tried) {
@@ -649,7 +649,7 @@
     sess.exercises.forEach(function(e, i){ e.index = i; });
     return sess;
   }
-  // Exercises with no blocks of their own (Planner, pool, PT): straight sets.
+  // Exercises with no blocks of their own (Planner, pool): straight sets.
   function straight(label, exs, extra){
     exs.forEach(function(e, i){ e.block = i; e.index = i; });
     var out = { label: label, exercises: exs,
@@ -676,7 +676,7 @@
     var d = P.days[day];
     if (d) {
       var sess = fromBlocks(d.label, d.blocks,
-        { core: true, heads: true, minutes: d.minutes, ptAlternative: !!d.ptAlternative });
+        { core: true, heads: true, minutes: d.minutes });
       sess.blocks.forEach(function(b){ b.exercises.forEach(function(e){ applySwap(e, day, b.superset); }); });
       return withWarmup(sess);
     }
@@ -773,19 +773,8 @@
     return applySwap(e, "pool", false);
   }
 
-  var PT = "ironlog.pt.v1";            // today's PT exercise list, this device
-  function ptNames(){
-    var p = read(PT, null), names = (p && p.date === state.date) ? p.names.slice() : [];
-    state.sets.forEach(function(s){ if (s.day === "pt" && names.indexOf(s.exercise) < 0) names.push(s.exercise); });
-    return names;
-  }
-  function ptSession(){
-    return straight(P.ptLabel, ptNames().map(function(n){ return fromLibrary(n); }), { pt: true });
-  }
-
   function currentSession(){
     if (state.mode === "pool") return poolSession();
-    if (state.mode === "pt") return ptSession();
     if (state.mode === "bonus"){
       if (String(state.bonusId).indexOf("plan-") === 0) return plannedSession(String(state.bonusId).slice(5), "bonus");
       var b = P.bonus[state.bonusId];
@@ -795,12 +784,11 @@
   }
   function isBonus(){ return state.mode === "bonus"; }
 
-  // What goes in the `day` column. Bonus, pool and PT sets are kept apart from
+  // What goes in the `day` column. Bonus and pool sets are kept apart from
   // the planned day's so the pool and the history can tell them apart.
   function logDay(){
     if (state.mode === "bonus") return "bonus:" + state.bonusId;
     if (state.mode === "pool") return "pool";
-    if (state.mode === "pt") return "pt";
     return state.day;
   }
 
@@ -815,8 +803,13 @@
       return (r.day === state.day || String(r.day).indexOf(state.day + ":") === 0) && r.sets > 0 && !isWarm(r.exercise);
     });
   }
-  function ptLogged(){
-    return weekRows().some(function(r){ return r.day === "pt" && r.sets > 0; });
+  /* ⭐ The weekend has ONE catch-up day (v3, 25 Oct 2026). Whichever of Sat/Sun
+     gets catch-up work first is it; the other is rest, and stops offering the
+     pool even if sets are left — they drop off at Sunday 23:59 as always. */
+  function weekendRest(){
+    if (state.day !== "sat" && state.day !== "sun") return false;
+    var wk = W.weekDates(londonToday()), other = state.day === "sat" ? wk.sun : wk.sat;
+    return weekRows().some(function(r){ return W.isPoolDay(r.day) && r.date === other && r.sets > 0; });
   }
 
   // A card's sets. A pool card counts the lift itself AND any swap done for it
@@ -865,6 +858,7 @@
 
   function poolCardHTML(){
     var pool = poolNow();
+    if (weekendRest() && state.mode !== "pool") return "";
     if (state.mode === "pool"){
       return '<p class="note">Sets missed earlier this week. Log them as normal — each one comes off the pool. ' +
              'The pool clears Sunday 23:59 (London); anything left then drops off.</p>';
@@ -940,31 +934,6 @@
     '</div>';
   }
 
-  function ptAddHTML(){
-    return '<div class="card"><div class="cardhead"><h2>Add an exercise</h2></div>' +
-      '<p class="note">Whatever Sophie has you doing. Pick from the library or type a new name.</p>' +
-      '<div class="addrow" style="margin-top:0">' +
-        '<input id="ptName" list="ptLib" placeholder="Exercise" autocomplete="off" ' +
-          'style="flex:1;min-width:0;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:11px;font-size:16px">' +
-        '<datalist id="ptLib">' + state.lib.map(function(l){ return '<option value="' + esc(l.name) + '">'; }).join("") + '</datalist>' +
-        '<button id="ptAdd">Add</button>' +
-      '</div></div>';
-  }
-  function wirePt(){
-    var b = document.getElementById("ptAdd");
-    if (!b) return;
-    b.onclick = function(){
-      var v = document.getElementById("ptName").value.trim().replace(/\s+/g, " ");
-      if (!v) return;
-      var l = libEntry(v); if (l) v = l.name;          // keep the library's spelling, so history joins up
-      var names = ptNames();
-      if (names.some(function(n){ return lc(n) === lc(v); })) return;
-      names.push(v);
-      write(PT, { date: state.date, names: names });
-      render(); fetchLast().then(render);
-    };
-  }
-
   function render(){
     var prog = currentSession();
     var app = document.getElementById("app");
@@ -975,23 +944,27 @@
 
     if (!prog){
       var weekend = state.day === "sat" || state.day === "sun";
-      var pool = poolNow();
+      var pool = poolNow(), rest = weekendRest();
+      var anyBonus = Object.keys(bonusChoices()).length > 0;
       app.innerHTML = html +
         '<div class="card"><div class="rest-day">' +
-          '<h2>' + (state.mode === "pool" ? "Pool not loaded yet" : "Nothing planned today") + '</h2>' +
+          '<h2>' + (state.mode === "pool" ? "Pool not loaded yet" : (rest ? "Rest day" : (weekend ? "Catch-up day" : "Nothing planned today"))) + '</h2>' +
           '<p>' + (state.mode === "pool"
             ? "This week&rsquo;s sets have not loaded, so the pool is not known yet. It appears once the server answers."
-            : (weekend ? "No planned work at the weekend — it is for catching up. " : "") +
-              (pool && pool.total ? "Work the pool above." : (pool ? "The pool is empty: pick a bonus above if you fancy one." : ""))) + '</p>' +
+            : rest
+              ? "This weekend&rsquo;s catch-up is done, so today is rest. Anything left in the pool drops off at Sunday 23:59."
+              : (weekend ? "One weekend day is for catching up, the other for rest — whichever day you catch up on, the other becomes rest. " : "") +
+                (pool && pool.total ? "Work the pool above."
+                  : (pool ? (anyBonus ? "The pool is empty: pick a bonus above if you fancy one." : "Nothing to catch up — rest.") : ""))) + '</p>' +
         '</div></div>' + tallyHTML() + footHTML();
       wireTop(); wireFoot();
       return;
     }
 
-    // Pool work, a bonus or PT adds to the week; it does not stand in for
-    // today's planned session (PT stands in for Wednesday only, by design).
+    // Pool work or a bonus adds to the week; it does not stand in for today's
+    // planned session.
     var today = coreFor(state.day);
-    if (state.mode !== "core" && today && !coreLogged() && !(state.mode === "pt" && today.ptAlternative)){
+    if (state.mode !== "core" && today && !coreLogged()){
       html += '<div class="card outstanding"><b>Today&rsquo;s session is still outstanding.</b> ' +
               'This adds to the week; it does not stand in for it.</div>';
     }
@@ -1001,9 +974,6 @@
     }
     if (prog.pool && !prog.exercises.length){
       html += '<div class="card"><div class="rest-day"><h2>Pool is empty</h2><p>Nothing missed this week.</p></div></div>';
-    }
-    if (prog.pt && !prog.exercises.length){
-      html += '<p class="note">Log the PT session here instead of the solo leg day. Once a set is logged, the squats and deadlifts stay out of the pool.</p>';
     }
 
     if (prog.warmup){
@@ -1021,12 +991,10 @@
       '</div>';
     });
 
-    if (prog.pt) html += ptAddHTML();
 
     app.innerHTML = html + tallyHTML() + footHTML();
     wireCards();
     wireTop();
-    wirePt();
     wireFoot();
   }
 
@@ -1319,7 +1287,7 @@
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
   function fmtW(w){ var n = Math.round(parseFloat(w)*100)/100; return String(n); }
 
-  // Today's session (and PT on Wednesday), the pool, and — only once the pool
+  // Today's session, the pool, and — only once the pool
   // is empty — bonus work.
   function choose(mode, bonusId){
     state.mode = mode; state.bonusId = bonusId || null; state.chosen = true;
@@ -1336,24 +1304,22 @@
     if (core){
       var mark = coreLogged() ? " · done" : (weekKnown() ? " · not yet" : "");
       h += '<div class="prow">' +
-             '<button class="' + (core.ptAlternative ? '' : 'wide') + (state.mode === "core" ? ' sel' : '') + '" data-mode="core">' +
+             '<button class="wide' + (state.mode === "core" ? ' sel' : '') + '" data-mode="core">' +
                esc(core.label) + '<span class="pmark">' + mark + '</span></button>' +
-             (core.ptAlternative
-               ? '<button class="' + (state.mode === "pt" ? 'sel' : '') + '" data-mode="pt">' + esc(P.ptLabel) +
-                 (ptLogged() ? ' <span class="pmark">✓</span>' : '') + '</button>'
-               : '') +
            '</div>';
     }
 
-    var pool = poolNow();
-    if (pool && (pool.total || state.mode === "pool")){
+    var pool = poolNow(), resting = weekendRest() && state.mode !== "pool";
+    if (pool && !resting && (pool.total || state.mode === "pool")){
       h += '<div class="prow"><span class="plabel">Pool</span>' +
            '<button class="' + (state.mode === "pool" ? 'sel' : '') + '" data-mode="pool">' +
              (pool.total ? pool.total + ' set' + (pool.total === 1 ? '' : 's') + ' to catch up' : 'Empty ✓') + '</button></div>';
     }
 
-    if (pool && !pool.total){
-      var choices = bonusChoices();
+    var choices = bonusChoices(), anyBonus = Object.keys(choices).length > 0;
+    if (!anyBonus && !isBonus()) {
+      // v3 has no bonus menu; say nothing rather than offer an empty row.
+    } else if (pool && !pool.total){
       h += '<div class="prow bonusrow"><span class="plabel">Bonus</span>' +
            Object.keys(choices).map(function(id){
              var did = (state.week && state.week.bonus || []).some(function(x){ return x.id === id; });
@@ -1381,7 +1347,7 @@
   // there is one, otherwise the pool if it has anything in it.
   function defaultMode(){
     if (state.chosen) return;
-    if (coreFor(state.day)) { state.mode = "core"; return; }
+    if (coreFor(state.day) || weekendRest()) { state.mode = "core"; return; }
     var pool = poolNow();
     state.mode = pool && pool.total ? "pool" : "core";
   }
@@ -1400,7 +1366,7 @@
   if (lastSet && lastSet.day) {
     var ld = String(lastSet.day);
     if (ld.indexOf("bonus:") === 0) { state.mode = "bonus"; state.bonusId = ld.slice(6); state.chosen = true; }
-    else if (ld === "pool" || ld.indexOf("pool:") === 0 || ld === "pt") { state.mode = ld === "pt" ? "pt" : "pool"; state.chosen = true; }
+    else if (ld === "pool" || ld.indexOf("pool:") === 0) { state.mode = "pool"; state.chosen = true; }
   }
   defaultMode();
 
@@ -1445,6 +1411,6 @@
   };
 })();
 </script>
-<script src="planner.js?v=2026-10-08a"></script>
+<script src="planner.js?v=2026-10-25a"></script>
 </body>
 </html>

@@ -8,7 +8,7 @@
 // there shows up here within the cache window below, with nobody re-syncing.
 //
 // ⚠️ ONLY DATES LEAVE THIS FUNCTION. The feed carries trip names, places,
-// flight numbers and seats; Sophie needs to know when, not where or why. So
+// flight numbers and seats; the Planner needs to know when, not where or why. So
 // no title, location or description is ever put in the response.
 //
 // A day counts as away if any Travel event touches it. All-day events run
