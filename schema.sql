@@ -32,14 +32,17 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 -- ------------------------------------------------------------------ PLANNER
 -- The exercise library. Seeded below from what programme.js already prescribes;
--- Sophie adds to it from the Planner tab. `weight` is the suggested load — kg,
--- or a nominal band level when kind = 'banded'.
+-- Sophie adds to it from the Planner tab. `weight` is the TARGET load (since
+-- 27 Oct 2026): written by Claude at the weekly review, shown on the lift's card
+-- with "↑ target", and set back to NULL by /api/sets when a set is logged at or
+-- above it. Same units as sets.weight: kg as loaded (per dumbbell for DB lifts,
+-- the whole bar for barbells), or a nominal band level when kind = 'banded'.
 CREATE TABLE IF NOT EXISTS exercises (
   name       TEXT PRIMARY KEY COLLATE NOCASE,
   kind       TEXT    NOT NULL DEFAULT 'weighted',   -- weighted|banded
   sets       INTEGER NOT NULL DEFAULT 3,
   reps       TEXT    NOT NULL DEFAULT '8-12',       -- "8-12", "15", "AMRAP"
-  weight     REAL,                                  -- suggested load, may be null
+  weight     REAL,                                  -- target load; NULL = no target
   rest       INTEGER NOT NULL DEFAULT 75,
   step       REAL,                                  -- +/- increment; null = default
   side       INTEGER NOT NULL DEFAULT 0,            -- 1 = logged per arm/side

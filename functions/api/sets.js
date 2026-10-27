@@ -15,6 +15,12 @@
 // `ts` keeps meaning "when the set was performed" and is never bumped by an
 // edit. Editing a typo does not move the set in time.
 //
+// TARGET WEIGHTS. exercises.weight is a target set by Claude at the weekly
+// review (NULL = none). A set written here at or above it clears it, so the
+// next card goes back to last-session behaviour. Only sets that actually
+// changed a row count: a retry of a set already stored writes nothing, so it
+// cannot wipe a target set after that set was first logged.
+//
 // SETS ARE APPLIED BEFORE DELETES, deliberately. A set logged and then deleted
 // while offline arrives as both in one batch; inserting first and deleting
 // second leaves nothing behind, which is what happened. The other order leaves
@@ -41,7 +47,7 @@ export async function onRequestPost({ request, env }) {
   );
   const del = env.DB.prepare(`DELETE FROM sets WHERE id = ?`);
 
-  const writes = [], removals = [];
+  const writes = [], written_sets = [], removals = [];
   for (const s of sets) {
     if (!s?.id || !s?.date || !s?.exercise) continue;
     writes.push(up.bind(
@@ -50,6 +56,7 @@ export async function onRequestPost({ request, env }) {
       String(s.ts || new Date().toISOString()),
       s.edited_at ? String(s.edited_at) : null
     ));
+    written_sets.push(s);
   }
   for (const d of deletes) {
     const id = typeof d === "string" ? d : d?.id;
@@ -57,10 +64,24 @@ export async function onRequestPost({ request, env }) {
   }
 
   try {
-    let written = 0, removed = 0;
+    let written = 0, removed = 0, targetsCleared = 0;
     if (writes.length) {
       const r = await env.DB.batch(writes);
       written = r.reduce((n, x) => n + (x?.meta?.changes || 0), 0);
+      // exercises.name is COLLATE NOCASE, so "db curl" reaches "DB Curl".
+      const reach = env.DB.prepare(
+        `UPDATE exercises SET weight = NULL
+          WHERE name = ? AND weight IS NOT NULL AND weight <= ?`
+      );
+      const clears = [];
+      r.forEach((x, i) => {
+        const s = written_sets[i], w = Number(s.weight) || 0;
+        if ((x?.meta?.changes || 0) > 0 && w > 0) clears.push(reach.bind(String(s.exercise), w));
+      });
+      if (clears.length) {
+        const c = await env.DB.batch(clears);
+        targetsCleared = c.reduce((n, x) => n + (x?.meta?.changes || 0), 0);
+      }
     }
     if (removals.length) {
       const r = await env.DB.batch(removals);
@@ -68,7 +89,7 @@ export async function onRequestPost({ request, env }) {
     }
     // Report real changes, not the size of what was sent, or the client cannot
     // tell a retry from a write.
-    return json({ ok: true, received: writes.length, written, removed });
+    return json({ ok: true, received: writes.length, written, removed, targetsCleared });
   } catch (e) {
     return json({ error: String(e?.message || e) }, 500);
   }

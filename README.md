@@ -135,6 +135,46 @@ pill. A note typed with no signal reaches D1 once the signal returns. A half-typ
 note survives a reload. The card is rendered outside `#app`, so logging a set
 never wipes it. `GET /api/prompts` returns the active prompts, each with its notes.
 
+### Target weights
+
+`exercises.weight` is a **target load** (since 27 Oct 2026; every row was NULL
+then). Claude writes it at the weekly review, straight into D1 with SQL. The page
+has no UI for setting it.
+
+- **Set:** the lift's card opens with the target in the weight box, and the line
+  under the name reads **↑ target 32.5 kg**. It replaces last session's weight in
+  the box; the "Last time" line still shows.
+- **Reached:** the first set logged at or above the target clears it. `/api/sets`
+  sets the column back to NULL in the same request that stores the set. Only sets
+  that actually change a row count, so a late retry of an older set can't wipe a
+  newer target. The phone drops the marker as soon as the set is logged, signal
+  or not.
+- **NULL:** exactly the old behaviour; the card opens on last session's numbers.
+- **Units:** the same as `sets.weight`, i.e. what is loaded and typed in: per
+  dumbbell for DB lifts, the whole bar for barbell lifts, band level for bands.
+- **Planner:** the "Suggested kg" field when adding a library exercise writes
+  this same column, so it sets a target too.
+
+```sql
+-- set a target (name matches case-insensitively)
+UPDATE exercises SET weight = 32.5 WHERE name = 'Barbell Bicep Curl';
+-- remove one
+UPDATE exercises SET weight = NULL WHERE name = 'Barbell Bicep Curl';
+-- see the targets still open
+SELECT name, weight FROM exercises WHERE weight IS NOT NULL;
+```
+
+### When the Access login expires
+
+Cloudflare Access sessions expire. After that, every API call is answered with a
+redirect to the Access login page. The page now spots that redirect: it asks
+with `redirect: "manual"`, so the login redirect comes back as an
+`opaqueredirect` response instead of looking like a network failure. The sync
+pill then reads **"Login expired — refresh to re-authenticate"** with the number
+of items held. Tapping it reloads the page, Access signs you back in, and the
+queue drains. Ending a session while expired says the same thing and keeps
+every set. Nothing is dropped, because the queue lives in `localStorage`.
+
 ### The Travel calendar feed
 
 `/api/away` reads the private iCal address of the Google **Travel** calendar from
