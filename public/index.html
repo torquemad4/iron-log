@@ -763,8 +763,29 @@
   function poolNow(){ return weekKnown() ? W.computePool(P, weekRows(), londonToday()) : null; }
   // The pool as it stood before today's pool work, so a pool session keeps its
   // shape — sets already worked off today show as done rather than vanishing.
+  /* Submitting a pool session ("End session") draws a line under it: the
+     pool starts again from what is left, so a lift whose pending sets were all
+     done drops off the list, and a part-done one comes back with only its
+     remaining sets. Pool sets logged today up to that moment count as already
+     done; only sets after it show as this session's. Kept on this phone for
+     today. */
+  var POOLEND = "ironlog.poolend.v1";
+  function poolEndedAt(){ var e = read(POOLEND, null); return e && e.date === state.date ? e.at : null; }
+  function afterPoolEnd(s){ var t = poolEndedAt(); return !t || String(s.ts) > t; }
+
   function poolAtStartRows(){
-    return weekRows().filter(function(r){ return !(W.isPoolDay(r.day) && r.date === state.date); });
+    var rows = weekRows().filter(function(r){ return !(W.isPoolDay(r.day) && r.date === state.date); });
+    var t = poolEndedAt();
+    if (t){
+      var add = {};
+      state.sets.forEach(function(s){
+        if (s.date !== state.date || !W.isPoolDay(s.day) || String(s.ts) > t) return;
+        var k = s.day + "|" + lc(s.exercise);
+        (add[k] = add[k] || { day: s.day, date: s.date, exercise: s.exercise, sets: 0 }).sets++;
+      });
+      Object.keys(add).forEach(function(k){ rows.push(add[k]); });
+    }
+    return rows;
   }
   function poolAtStart(){
     if (!weekKnown()) return null;
@@ -781,6 +802,7 @@
     // Anything worked off today that is no longer in the starting pool (a
     // second device, say) still shows, so its sets can be corrected.
     state.sets.forEach(function(s){
+      if (!afterPoolEnd(s)) return;
       var orig = s.day === "pool" ? s.exercise : (String(s.day).indexOf("pool:") === 0 ? String(s.day).slice(5) : null);
       if (orig && !exs.some(function(e){ return lc(e.swapOf) === lc(orig); }))
         exs.push(poolCard(orig, 0));
@@ -875,6 +897,7 @@
   function setsForEx(ex){
     if (!ex.swapOf) return setsFor(ex.name);
     return state.sets.filter(function(s){
+      if (ex.base === "pool" && !afterPoolEnd(s)) return false;   // a submitted pool session is behind the line
       return (s.day === ex.base && lc(s.exercise) === lc(ex.swapOf)) || s.day === ex.base + ":" + ex.swapOf;
     });
   }
@@ -1317,7 +1340,7 @@
       started_at: (read(STARTED,{}) || {}).at || null,
       sets: state.sets
     };
-    var wasBonus = isBonus();
+    var wasBonus = isBonus(), wasPool = state.mode === "pool";
     var btn = this; btn.disabled = true; btn.textContent = "Syncing…";
     flush();
     api("/api/session/end", {
@@ -1327,6 +1350,10 @@
         btn.disabled = false; btn.textContent = "Finish & sync";
         document.getElementById("endDlg").close();
         if (res.ok && res.j.ok) {
+          if (wasPool) {
+            write(POOLEND, { date: state.date, at: new Date().toISOString() });
+            buildPicker(); render();
+          }
           var j = res.j;
           var msg = "Session saved — " + j.sets + " sets across " + j.exercises + " exercises"
                 + (j.minutes != null ? ", " + j.minutes + " min" : "") + ".";

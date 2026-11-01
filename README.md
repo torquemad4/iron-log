@@ -84,6 +84,14 @@ more; old `day = 'pt'` rows still count in the tally by library muscle. Nothing 
 from the week's sets (`public/week.js`, fed by `/api/week-status`), so it cannot
 drift from them. `npm test` checks it against the real programme.
 
+**Submitting a pool session.** While a pool session is open, a lift whose
+pending sets are all done stays on screen (marked done), so its sets can still
+be corrected. **End session** draws a line under it: the session starts again from
+what is left. Finished lifts drop off, and a part-done lift comes back with only
+its remaining sets. The line is kept on the phone for the day (`ironlog.poolend.v1`
+in `localStorage`); nothing about it is stored in D1, since the pool itself is
+worked out from the sets.
+
 **Alternatives.** Every card in a planned day's session and in a pool session has
 an "Alternatives" button: a short list of swaps that need no barbell (floor,
 chair, loaded backpack, band), kept in `programme.js` under `alternatives`, plus
