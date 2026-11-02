@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS sets (
   exercise   TEXT NOT NULL,
   set_index  INTEGER NOT NULL,
   reps       INTEGER NOT NULL,
-  weight     REAL    NOT NULL,
+  weight     REAL    NOT NULL,      -- kg; for a banded lift the band code: 11 R, 12 B, 13 P, 14 G (other values = old levels, read as P)
   ts         TEXT    NOT NULL,      -- ISO timestamp the set was PERFORMED; an edit never moves it
   edited_at  TEXT,                  -- set only when a logged set is corrected; the last-write-wins clock
   created_at TEXT    DEFAULT CURRENT_TIMESTAMP
@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- 27 Oct 2026): written by Claude at the weekly review, shown on the lift's card
 -- with "↑ target", and set back to NULL by /api/sets when a set is logged at or
 -- above it. Same units as sets.weight: kg as loaded (per dumbbell for DB lifts,
--- the whole bar for barbells), or a nominal band level when kind = 'banded'.
+-- the whole bar for barbells), or a band code when kind = 'banded' (11 R, 12 B,
+-- 13 P, 14 G).
 CREATE TABLE IF NOT EXISTS exercises (
   name       TEXT PRIMARY KEY COLLATE NOCASE,
   kind       TEXT    NOT NULL DEFAULT 'weighted',   -- weighted|banded

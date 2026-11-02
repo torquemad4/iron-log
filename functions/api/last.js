@@ -1,3 +1,5 @@
+import { bandLabel, bandedNames, BANDS } from "../../lib/api.js";
+
 // GET /api/last?ex=Single-Arm+DB+Row&ex=Band+Face+Pull&date=2026-08-31&day=mon
 //
 // ⭐ Keyed on the EXERCISE, not the day. Bonus and core sessions share lifts —
@@ -34,8 +36,10 @@ export async function onRequestGet({ request, env }) {
     const byEx = {};
     for (const r of results || []) (byEx[r.exercise] ||= []).push(r);
 
+    const banded = await bandedNames(env);
     const last = {};
     for (const [name, rows] of Object.entries(byEx)) {
+      const band = banded.has(name.toLowerCase());
       const head = rows[0];
       const session = rows.filter(r => r.date === head.date && r.day === head.day)
                           .sort((a, b) => a.set_index - b.set_index);
@@ -44,9 +48,10 @@ export async function onRequestGet({ request, env }) {
       last[name] = {
         date: head.date,
         day: head.day,
-        summary: session.map(r => `${r.reps}×${trim(r.weight)}`).join(", "),
+        summary: session.map(r => `${r.reps}×${band ? bandLabel(r.weight) : trim(r.weight)}`).join(", "),
         topReps: top.reps,
-        topWeight: trim(top.weight),
+        // A band level comes back as its code, an old 1-5 level as P's code.
+        topWeight: band ? BANDS.base + 1 + BANDS.levels.indexOf(bandLabel(top.weight)) : trim(top.weight),
         sets: session.length,
       };
     }
