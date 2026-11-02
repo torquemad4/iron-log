@@ -1,3 +1,5 @@
+import { bandLabel, bandedNames } from "../../lib/api.js";
+
 // GET /api/history?limit=15        -> summarised sessions for the history sheet
 // GET /api/history?limit=1000&raw=1 -> every set, for the JSON export
 export async function onRequestGet({ request, env }) {
@@ -18,6 +20,7 @@ export async function onRequestGet({ request, env }) {
       `SELECT DISTINCT date, day FROM sets ORDER BY date DESC LIMIT ?`
     ).bind(limit).all();
 
+    const banded = await bandedNames(env);
     const sessions = [];
     for (const d of dates || []) {
       const { results: rows } = await env.DB.prepare(
@@ -30,7 +33,7 @@ export async function onRequestGet({ request, env }) {
         date: d.date,
         day: d.day,
         summary: Object.entries(byEx)
-          .map(([n, rs]) => `${n}: ${rs.map(r => `${r.reps}×${Math.round(r.weight * 100) / 100}`).join(", ")}`)
+          .map(([n, rs]) => `${n}: ${rs.map(r => `${r.reps}×${banded.has(n.toLowerCase()) ? bandLabel(r.weight) : Math.round(r.weight * 100) / 100}`).join(", ")}`)
           .join(" · ")
       });
     }

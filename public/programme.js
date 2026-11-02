@@ -262,7 +262,14 @@
   // cannot say side delt from rear delt.
   var LIBRARY_MUSCLE = { Chest: "Chest", Back: "Back", Biceps: "Biceps", Triceps: "Triceps", Legs: "Legs", Traps: "Traps", Core: "Abs" };
 
+  // Band levels, lightest to heaviest. A banded set is stored as a number so it
+  // still compares: R = base+1 … G = base+4 (11-14). Any other value on a banded
+  // lift predates the letters and reads as `legacy`. lib/api.js holds the same
+  // table for the server; the tests check they match.
+  var BANDS = { levels: ["R", "B", "P", "G"], base: 10, legacy: "P" };
+
   root.PROGRAMME = {
+    bands: BANDS,
     version: "2026-10-26-cut",
     // Days before this are not graded against this programme: the pool for the
     // week it started in only looks at days on or after it.

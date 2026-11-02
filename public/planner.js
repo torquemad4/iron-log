@@ -21,6 +21,12 @@
   var L = window.IronLog, P = window.PROGRAMME;
   if (!L) return;             // the Log stopped to repair a stale cache and is reloading
   var esc = L.esc, fmtW = L.fmtW;
+  // A banded lift's load is a band level (R B P G), stored as a code — see index.html.
+  function loadOf(w, banded){ return banded ? L.bandLabel(w) : fmtW(w); }
+  function readLoad(v, banded){
+    if (v === "" || v == null) return null;
+    return banded ? L.bandCode(v) : parseFloat(v);
+  }
   var maxesInfo = null;       // { rows, last } from /api/rep-maxes
   var away = null;            // /api/away: { connected, days: [iso…], error? }
   var FILTER_KEY = "ironlog.planfilter.v1";
@@ -83,7 +89,8 @@
   }
   function unit(name){ var l = lib(name); return l && l.kind === "banded" ? " band" : " kg"; }
   function rx(x){
-    return x.sets + "×" + esc(x.reps) + (x.weight != null ? " @ " + fmtW(x.weight) + unit(x.name) : "");
+    var banded = (lib(x.name) || {}).kind === "banded";
+    return x.sets + "×" + esc(x.reps) + (x.weight != null ? " @ " + loadOf(x.weight, banded) + unit(x.name) : "");
   }
   function when(iso){
     if (!iso) return "";
@@ -220,7 +227,7 @@
     return '<div class="note" style="margin:0 0 4px">' + shown.length + ' of ' + L.state.lib.length + '</div>' +
       shown.map(function(x){
         return '<button class="li" data-rm="' + esc(x.name) + '"><span>' + esc(x.name) + tags(x) + '</span>' +
-               '<small>' + x.sets + '×' + esc(x.reps) + (x.weight != null ? ' @ ' + fmtW(x.weight) + (x.kind === "banded" ? " band" : " kg") : '') + '</small></button>';
+               '<small>' + x.sets + '×' + esc(x.reps) + (x.weight != null ? ' @ ' + loadOf(x.weight, x.kind === "banded") + (x.kind === "banded" ? " band" : " kg") : '') + '</small></button>';
       }).join("");
   }
 
@@ -297,7 +304,9 @@
             '<div class="f3">' +
               '<div><label>Sets</label><input data-fx="' + i + '|sets" type="number" inputmode="numeric" min="1" max="12" value="' + x.sets + '"></div>' +
               '<div><label>Reps</label><input data-fx="' + i + '|reps" type="text" value="' + esc(x.reps) + '"></div>' +
-              '<div><label>' + (banded ? "Band level" : "Suggested kg") + '</label><input data-fx="' + i + '|weight" type="number" inputmode="decimal" step="0.5" min="0" placeholder="—" value="' + (x.weight != null ? fmtW(x.weight) : "") + '"></div>' +
+              '<div><label>' + (banded ? "Band R·B·P·G" : "Suggested kg") + '</label><input data-fx="' + i + '|weight"' +
+                (banded ? ' type="text" maxlength="1" autocapitalize="characters"' : ' type="number" inputmode="decimal" step="0.5" min="0"') +
+                ' placeholder="—" value="' + (x.weight != null ? loadOf(x.weight, banded) : "") + '"></div>' +
             '</div></div>';
         }).join("") : '<div class="empty" style="padding:10px 0">No exercises yet. Add one below.</div>') +
       '</div>' +
@@ -325,7 +334,7 @@
         var p = inp.dataset.fx.split("|"), x = s.exercises[+p[0]];
         if (p[1] === "sets") x.sets = parseInt(inp.value, 10) || 1;
         else if (p[1] === "reps") x.reps = inp.value;
-        else x.weight = inp.value === "" ? null : parseFloat(inp.value);
+        else x.weight = readLoad(inp.value, (lib(x.name) || {}).kind === "banded");
       };
     });
     body.querySelectorAll("[data-mv]").forEach(function(b){
@@ -394,7 +403,9 @@
   }
   function kindLabel(){
     document.getElementById("exWLab").textContent =
-      document.getElementById("exEquip").value === "band" ? "Suggested band level" : "Suggested kg";
+      document.getElementById("exEquip").value === "band" ? "Suggested band R·B·P·G" : "Suggested kg";
+    var w = document.getElementById("exWeight"), band = document.getElementById("exEquip").value === "band";
+    w.type = band ? "text" : "number"; w.maxLength = band ? 1 : 524288;
   }
   document.getElementById("exEquip").onchange = kindLabel;
   document.getElementById("exCancel").onclick = function(){ document.getElementById("exDlg").close(); };
@@ -410,7 +421,7 @@
       muscle: document.getElementById("exMuscle").value,
       sets: document.getElementById("exSets").value,
       reps: document.getElementById("exReps").value,
-      weight: document.getElementById("exWeight").value,
+      weight: readLoad(document.getElementById("exWeight").value, document.getElementById("exEquip").value === "band"),
       rest: document.getElementById("exRest").value,
       side: document.getElementById("exSide").checked
     }).then(function(j){
@@ -444,10 +455,10 @@
         ex.maxes.map(function(m){
           // The progression, oldest first, when there is more than one date.
           var trail = m.history.length > 1
-            ? '<div class="hist">' + m.history.map(function(h){ return fmtW(h.weight) + ' (' + esc(shortDate(h.date)) + ')'; }).join(" → ") + '</div>'
+            ? '<div class="hist">' + m.history.map(function(h){ return loadOf(h.weight, banded) + ' (' + esc(shortDate(h.date)) + ')'; }).join(" → ") + '</div>'
             : '';
           return '<tr><td>' + m.reps + '</td>' +
-                 '<td><b>' + fmtW(m.best.weight) + (banded ? ' band' : ' kg') + '</b>' + trail + '</td>' +
+                 '<td><b>' + loadOf(m.best.weight, banded) + (banded ? ' band' : ' kg') + '</b>' + trail + '</td>' +
                  '<td>' + esc(shortDate(m.best.date)) + '<div class="hist">' + (m.best.source === "ironlog" ? "Iron Log" : "Trainerize") + '</div></td></tr>';
         }).join("") +
         '</tbody></table>';

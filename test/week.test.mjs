@@ -197,3 +197,12 @@ test("every lift on every day has an alternative", () => {
   for (const [k, d] of Object.entries(P.days)) for (const b of d.blocks) for (const s of b)
     assert.ok((P.alternatives[s.ex] || []).length, `${k}: ${s.ex}`);
 });
+
+test("band levels: the server's table matches programme.js, and old 1-5 values read as P", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../lib/api.js", import.meta.url), "utf8");
+  const api = await import("data:text/javascript," + encodeURIComponent(src));
+  assert.deepEqual(api.BANDS, P.bands);
+  assert.deepEqual([11, 12, 13, 14].map(api.bandLabel), ["R", "B", "P", "G"]);
+  assert.deepEqual([1, 4, 5, 0, 15].map(api.bandLabel), ["P", "P", "P", "P", "P"]);
+});

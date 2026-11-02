@@ -397,8 +397,8 @@
 <!-- ?v= : bump it whenever programme.js, week.js or planner.js change, so a
      phone holding an old cached copy cannot pair it with this page. A blank
      pool page on 7 Oct 2026 was exactly that: new page, old week.js. -->
-<script src="programme.js?v=2026-10-25c"></script>
-<script src="week.js?v=2026-10-25c"></script>
+<script src="programme.js?v=2026-11-02a"></script>
+<script src="week.js?v=2026-11-02a"></script>
 <script>
 (function(){
   "use strict";
@@ -990,8 +990,8 @@
       '</div>' +
       '<div class="target">' + (ex.sets ? ex.sets + ' × ' : '') + esc(ex.reps) + ' reps' + (ex.side ? " per side" : "") + ' · ' + ex.rest + 's rest' +
         (ex.kit ? ' <span class="tag">' + esc(ex.kit) + '</span>' : '') +
-        (ex.suggested != null ? ' · suggested <b>' + fmtW(ex.suggested) + (ex.band ? ' (band)' : ' kg') + '</b>' : '') +
-        (targetFor(ex.name) != null ? ' · <span class="tgt">↑ target <b>' + fmtW(targetFor(ex.name)) + (ex.band ? ' (band)' : ' kg') + '</b></span>' : '') + '</div>' +
+        (ex.suggested != null ? ' · suggested <b>' + load(ex.suggested, ex.band) + (ex.band ? ' band' : ' kg') + '</b>' : '') +
+        (targetFor(ex.name) != null ? ' · <span class="tgt">↑ target <b>' + load(targetFor(ex.name), ex.band) + (ex.band ? ' band' : ' kg') + '</b></span>' : '') + '</div>' +
       (ex.swapped ? '<div class="target swapnote">Instead of <b>' + esc(ex.swapOf) + '</b> — counts as it</div>' : '') +
       (ex.from ? '<div class="target">From ' + ex.from.map(function(f){ return DAY_NAME[f.day] + ' ' + f.sets; }).join(' · ') + '</div>' +
                  '<div class="target">' + muscleTags(ex.name) + '</div>' : '') +
@@ -1003,12 +1003,14 @@
         done.map(function(s, idx){
           return '<button type="button" class="chip' + (idx === done.length - 1 ? " fresh" : "") + '" ' +
                  'data-edit="' + esc(s.id) + '" aria-label="Edit set ' + (idx + 1) + '">' +
-                 s.reps + ' × ' + fmtW(s.weight) + '</button>';
+                 s.reps + ' × ' + load(s.weight, ex.band) + '</button>';
         }).join("") +
       '</div>' +
       '<div class="steppers">' +
         stepperHTML(i, "reps", "Reps", prefill.reps, 1) +
-        stepperHTML(i, "weight", ex.band ? "Band level" : "Weight kg", prefill.weight, ex.step || (ex.band ? 1 : 2.5)) +
+        (ex.band
+          ? stepperHTML(i, "weight", "Band R·B·P·G", bandLabel(prefill.weight), 1, true)
+          : stepperHTML(i, "weight", "Weight kg", prefill.weight, ex.step || 2.5)) +
       '</div>' +
       '<button class="logbtn" data-log="' + i + '">' +
         (complete || !ex.sets ? "Log an extra set" : "Log set " + (done.length + 1) + " of " + ex.sets) +
@@ -1126,12 +1128,13 @@
     return { reps: lo, weight: ex.suggested != null ? ex.suggested : 0 };
   }
 
-  function stepperHTML(i, field, label, val, step){
+  function stepperHTML(i, field, label, val, step, band){
     return '<div class="stepper">' +
       '<div class="lab">'+label+'</div>' +
       '<div class="srow">' +
         '<button class="sbtn" data-step="'+i+'|'+field+'|-'+step+'">−</button>' +
-        '<input class="sval" inputmode="decimal" data-f="'+i+'|'+field+'" value="'+val+'">' +
+        '<input class="sval"' + (band ? ' data-band="1" inputmode="text" autocapitalize="characters" maxlength="1"' : ' inputmode="decimal"') +
+          ' data-f="'+i+'|'+field+'" value="'+val+'">' +
         '<button class="sbtn" data-step="'+i+'|'+field+'|'+step+'">+</button>' +
       '</div></div>';
   }
@@ -1148,6 +1151,12 @@
       b.onclick = function(){
         var p = b.dataset.step.split("|");
         var inp = document.querySelector('[data-f="'+p[0]+"|"+p[1]+'"]');
+        if (inp.dataset.band){                   // − / + step through R B P G
+          var L = window.PROGRAMME.bands.levels;
+          var at = L.indexOf(bandLabel(bandCode(inp.value) || 0)), dir = parseFloat(p[2]) < 0 ? -1 : 1;
+          inp.value = L[Math.min(L.length - 1, Math.max(0, at + dir))];
+          return;
+        }
         var v = (parseFloat(inp.value)||0) + parseFloat(p[2]);
         if (v < 0) v = 0;
         inp.value = fmtW(v);
@@ -1176,7 +1185,9 @@
   function logSet(i){
     var sess = currentSession(), ex = sess.exercises[i];
     var reps   = parseFloat(document.querySelector('[data-f="'+i+'|reps"]').value) || 0;
-    var weight = parseFloat(document.querySelector('[data-f="'+i+'|weight"]').value) || 0;
+    var wv = document.querySelector('[data-f="'+i+'|weight"]').value;
+    var weight = ex.band ? bandCode(wv) : (parseFloat(wv) || 0);
+    if (ex.band && weight == null){ alert("Band level is R, B, P or G."); return; }
     if (reps <= 0) return;
 
     if (!read(STARTED, null) || read(STARTED,{}).date !== state.date){
@@ -1243,11 +1254,14 @@
     var prog = currentSession();
     var ex = prog && prog.exercises ? prog.exercises.filter(function(e){ return e.name === st.exercise; })[0] : null;
     var step = ex ? (ex.step || (ex.band ? 1 : 2.5)) : 1;
+    var band = !!(ex ? ex.band : (libEntry(st.exercise) || {}).kind === "banded");
     document.getElementById("edWhat").textContent =
       st.exercise + " · set " + st.set_index + (ex && ex.side ? " · per side" : "");
-    document.getElementById("edWLab").textContent = ex && ex.band ? "Band level" : "Weight kg";
+    document.getElementById("edWLab").textContent = band ? "Band R·B·P·G" : "Weight kg";
     var r = document.getElementById("edReps"), w = document.getElementById("edWeight");
-    r.value = st.reps; w.value = fmtW(st.weight);
+    w.type = band ? "text" : "number";
+    w.dataset.band = band ? "1" : "";
+    r.value = st.reps; w.value = load(st.weight, band);
     w.dataset.step = step; w.step = step;
     document.getElementById("editDlg").showModal();
   }
@@ -1257,6 +1271,11 @@
       var p = b.dataset.ed.split("|");
       var isReps = p[0] === "reps";
       var inp = document.getElementById(isReps ? "edReps" : "edWeight");
+      if (!isReps && inp.dataset.band){
+        var L = window.PROGRAMME.bands.levels, at = L.indexOf(bandLabel(bandCode(inp.value) || 0));
+        inp.value = L[Math.min(L.length - 1, Math.max(0, at + (parseFloat(p[1]) < 0 ? -1 : 1)))];
+        return;
+      }
       var stepv = isReps ? 1 : (parseFloat(inp.dataset.step) || 1);
       var v = (parseFloat(inp.value) || 0) + parseFloat(p[1]) * stepv;
       if (v < 0) v = 0;
@@ -1271,7 +1290,9 @@
   document.getElementById("edSave").onclick = function(){
     var st = findSet(editingId); if (!st){ document.getElementById("editDlg").close(); return; }
     var reps = parseInt(document.getElementById("edReps").value, 10) || 0;
-    var weight = parseFloat(document.getElementById("edWeight").value) || 0;
+    var we = document.getElementById("edWeight");
+    var weight = we.dataset.band ? bandCode(we.value) : (parseFloat(we.value) || 0);
+    if (we.dataset.band && weight == null){ alert("Band level is R, B, P or G."); return; }
     /* Zero reps is a deletion wearing a disguise, and a set row that says it
        happened zero times would quietly corrupt the volume maths. */
     if (reps <= 0){ alert("A set needs at least one rep. Use Delete to remove it."); return; }
@@ -1287,7 +1308,7 @@
 
   document.getElementById("edDelete").onclick = function(){
     var st = findSet(editingId); if (!st){ document.getElementById("editDlg").close(); return; }
-    if (!confirm("Delete this set — " + st.reps + " × " + fmtW(st.weight) + "?")) return;
+    if (!confirm("Delete this set — " + st.reps + " × " + load(st.weight, (libEntry(st.exercise) || {}).kind === "banded") + "?")) return;
     var ex = st.exercise, day = st.day, id = st.id;
     state.sets = state.sets.filter(function(x){ return x.id !== id; });
     queueDelete(id);
@@ -1412,6 +1433,20 @@
   function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
   function fmtW(w){ var n = Math.round(parseFloat(w)*100)/100; return String(n); }
+
+  /* ---------- band levels ----------
+     Bands are R, B, P, G, lightest to heaviest (programme.js `bands`). A
+     banded set is stored as a number so it still compares: R = 11 … G = 14.
+     Any other value on a banded lift predates the letters and reads as P. */
+  function bandCode(letter){                     // "p" -> 13; not a level -> null
+    var B = window.PROGRAMME.bands, i = B.levels.indexOf(String(letter == null ? "" : letter).trim().toUpperCase());
+    return i < 0 ? null : B.base + 1 + i;
+  }
+  function bandLabel(w){                         // 13 -> "P"; old 1-5 -> "P"
+    var B = window.PROGRAMME.bands, n = Number(w), i = n - B.base - 1;
+    return n === Math.round(n) && i >= 0 && i < B.levels.length ? B.levels[i] : B.legacy;
+  }
+  function load(w, band){ return band ? bandLabel(w) : fmtW(w); }
 
   // Today's session, the pool, and — only once the pool
   // is empty — bonus work.
@@ -1650,12 +1685,12 @@
   refreshPlan();
 
   window.IronLog = {
-    state: state, refreshPlan: refreshPlan, esc: esc, fmtW: fmtW,
+    state: state, refreshPlan: refreshPlan, esc: esc, fmtW: fmtW, bandLabel: bandLabel, bandCode: bandCode,
     setPlan: function(slots){ state.plan = slots; write(PLAN, slots); buildPicker(); render(); },
     setLib: function(lib){ state.lib = lib; write(LIB, lib); render(); }
   };
 })();
 </script>
-<script src="planner.js?v=2026-10-25c"></script>
+<script src="planner.js?v=2026-11-02a"></script>
 </body>
 </html>

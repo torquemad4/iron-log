@@ -159,7 +159,8 @@ has no UI for setting it.
   or not.
 - **NULL:** exactly the old behaviour; the card opens on last session's numbers.
 - **Units:** the same as `sets.weight`, i.e. what is loaded and typed in: per
-  dumbbell for DB lifts, the whole bar for barbell lifts, band level for bands.
+  dumbbell for DB lifts, the whole bar for barbell lifts, a band code for bands
+  (see "Band levels" below).
 - **Planner:** the "Suggested kg" field when adding a library exercise writes
   this same column, so it sets a target too.
 
@@ -170,6 +171,31 @@ UPDATE exercises SET weight = 32.5 WHERE name = 'Barbell Bicep Curl';
 UPDATE exercises SET weight = NULL WHERE name = 'Barbell Bicep Curl';
 -- see the targets still open
 SELECT name, weight FROM exercises WHERE weight IS NOT NULL;
+```
+
+### Band levels
+
+Bands are **R, B, P, G**, lightest to heaviest (since 2 Nov 2026). The page shows
+and takes letters everywhere for a banded lift (`exercises.kind = 'banded'`): the
+weight box, where − / + step through the letters, the chips, the edit dialog,
+"Last time", history, rep maxes and the Planner. D1 still stores a number, so
+the heavier band always compares higher:
+
+| Letter | `sets.weight` / `exercises.weight` |
+| --- | --- |
+| R | 11 |
+| B | 12 |
+| P | 13 |
+| G | 14 |
+
+Any other value on a banded lift predates the letters (the old 1–5 levels; 4 and
+5 were logged) and **reads as P**. Those rows were left as they were. The table
+lives in `public/programme.js` (`bands`) and, for the server's history and
+"last time" text, in `lib/api.js`; `npm test` checks the two match.
+
+```sql
+-- a band target of P on Banded Lat Pulldown
+UPDATE exercises SET weight = 13 WHERE name = 'Banded Lat Pulldown';
 ```
 
 ### When the Access login expires
