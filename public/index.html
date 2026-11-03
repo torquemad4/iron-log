@@ -993,8 +993,9 @@
         (ex.suggested != null ? ' · suggested <b>' + load(ex.suggested, ex.band) + (ex.band ? ' band' : ' kg') + '</b>' : '') +
         (targetFor(ex.name) != null ? ' · <span class="tgt">↑ target <b>' + load(targetFor(ex.name), ex.band) + (ex.band ? ' band' : ' kg') + '</b></span>' : '') + '</div>' +
       (ex.swapped ? '<div class="target swapnote">Instead of <b>' + esc(ex.swapOf) + '</b> — counts as it</div>' : '') +
-      (ex.from ? '<div class="target">From ' + ex.from.map(function(f){ return DAY_NAME[f.day] + ' ' + f.sets; }).join(' · ') + '</div>' +
-                 '<div class="target">' + muscleTags(ex.name) + '</div>' : '') +
+      (ex.from ? '<div class="target">From ' + ex.from.map(function(f){ return DAY_NAME[f.day] + ' ' + f.sets; }).join(' · ') + '</div>' : '') +
+      // Muscle tags on every card (pool or not); empty for lifts with no credit, like the warm-up.
+      (muscleTags(ex.name) ? '<div class="target">' + muscleTags(ex.name) + '</div>' : '') +
       (ex.cues && ex.cues.length ? '<ul class="cues">' + ex.cues.map(function(c){ return '<li>' + esc(c) + '</li>'; }).join("") + '</ul>' : '') +
       '<div class="last">' + (last
           ? 'Last time: <b>' + esc(last.summary) + '</b>' + (last.date ? ' · ' + esc(last.date) : '')
